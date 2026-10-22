@@ -1,0 +1,9 @@
+470ab6a3ced7da91c951db297a233f04546ed145cc63802a7507852c09f484bb  scripts/../tests/fixtures/real/binance_btcusdt-depth-snap.csv
+884fe4ad52cdee4917149d268fb9730c6641bd386d8e297e187f7eaea08573da  scripts/../tests/fixtures/real/binance_btcusdt-depth-update.csv
+0d448735ae1d87c8b1f0f50ae2c3a855628093390c8622c5675adb5c6eb44d16  scripts/../tests/fixtures/real/binance_btcusdt-quotes.parquet
+87a2f05284caea745ab6555553d63699b43fd2d399a11706535e35497a1db011  scripts/../tests/fixtures/real/binance_btcusdt-trades.parquet
+a90fd7b0a83d32190258651eca7ecb0ecdcaf3deb54f73a17ce028bfe49fdd74  scripts/../tests/fixtures/real/binance_ethusdt-trades.csv
+858c96af71deaef7c08960d309cd0b7bd0726d7e4fb2183285bd11ae78033a63  scripts/../tests/fixtures/real/NOTICE.md
+3c7a7827a6957516dbb0e227ec9e492cb098816cfc6440777452651afa6d93af  scripts/../tests/fixtures/real/SHA256SUMS
+d3b40b6b35d3703ee40e67c60c96387179fe0bf4886e975361a87f4720fa0ea2  scripts/../tests/fixtures/real/tardis_binance-futures_book_snapshot_25_BTCUSDT.csv
+40b3cdd0253172d248939e877047e65061c7f6de4d56dd190b0b603a5eb6a66b  scripts/../tests/fixtures/real/tardis_deribit_incremental_book_L2_BTC-PERPETUAL.csv

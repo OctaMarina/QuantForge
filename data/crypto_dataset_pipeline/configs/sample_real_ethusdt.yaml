@@ -1,0 +1,20 @@
+# Small REAL sample: Binance ETHUSDT spot trades 2020-08-14 10:00-15:00 UTC (69,806 rows incl. 70
+# exact duplicate rows) from nautilus_trader test_data (scripts/fetch_real_fixtures.sh).
+# Thresholds/windows are scaled down to the 5-hour sample; they are illustrative, not optimised.
+instrument: {exchange: binance, market_type: spot, base: ETH, quote: USDT, symbol: ETHUSDT}
+period:
+  start: "2020-08-14T10:00:00Z"
+  end: "2020-08-14T15:00:00Z"
+  bar_origin: "2020-08-14T10:00:00Z"
+warmup: {intraday_days: 0, daily_days: 0}
+bars:
+  types: [time, volume, notional]
+  time: {interval: 5min}
+  volume: {threshold: "2000"}          # ETH
+  notional: {threshold: "1000000"}     # USDT
+features:
+  returns: {calendar_horizons: [5min, 1h, 4h, 1d], bar_horizons: [1, 5, 20]}
+  realized_vol: {grid: 1min, windows: [1h], bar_windows: [20]}
+  flow: {min_trades_regression: 20, bar_windows: [20]}
+  structural: {window_bars: 40, min_length: 15, csw_window: 40, bde_window: 40}
+storage: {root: ./sample_output/data}
