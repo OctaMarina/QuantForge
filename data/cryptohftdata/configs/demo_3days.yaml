@@ -1,0 +1,16 @@
+# Demonstration config: all four bar types on 2025-06-28 .. 2025-06-30 (period with REST snapshots,
+# i.e. where the strict L2 reconstruction is anchored and verified).
+dataset:
+  name: demo_3days
+  start: 2025-06-28
+  end: 2025-06-30
+bars:
+  - {name: time_1m,    kind: time,   threshold: 60}
+  - {name: time_5s,    kind: time,   threshold: 5}
+  - {name: volume_50btc,  kind: volume, threshold: 50}
+  - {name: dollar_5musdt, kind: dollar, threshold: 5000000}
+  - {name: cusum_5bps,  kind: cusum,  threshold: 5}
+  - {name: cusum_5bps_both, kind: cusum, threshold: 5, cusum_reset: both}
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+workers: 3

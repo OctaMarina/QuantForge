@@ -1,0 +1,244 @@
+Python SDK Open Interest | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKOpen Interest
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Open Interest
+Download Open Interest Data
+Download open interest data for futures contracts. This data shows the total outstanding positions.
+SDKclient.get_open_interest()
+Python SDK Example
+Python
+Copy
+1# Get open interest data (futures exchanges only)
+2df = client.get_open_interest(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_FUTURES,
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes: timestamp, open_interest, open_interest_value
+10print(df.head())
+11
+12# Calculate open interest changes
+13df['oi_change'] = df['open_interest'].diff()
+14df['oi_change_pct'] = df['oi_change'] / df['open_interest'].shift(1) * 100
+15
+Data Format - CommonOpenInterest
+We keep open interest data in the CommonOpenInterest structure. This structure contains the total outstanding positions in futures contracts at specific points in time:
+Schema Overview
+Each open interest event contains time data, symbol data, and a full set of position metrics. These metrics include the total open interest by quantity and by notional value.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the open interest data
+ | symbol | STRING | No | Trading pair symbol (for example, 'BTCUSDT')
+ | sum_open_interest | STRING | Yes | Total open interest in the unit of the venue (stored as string for precision). The unit is the base asset on most venues, contracts on OKX and Kraken inverse futures, and raw instrument units on BitMEX (refer to the venue notes)
+ | sum_open_interest_value | STRING | Yes | Total notional value of open interest in the quote currency, if the venue gives it or if we can calculate it (stored as string for precision)
+ | timestamp | INT64 | No | Unix timestamp when the exchange took the open interest snapshot
+Venue-specific semantics
+OKX perpetual swaps: sum_open_interest is in contracts. Multiply it by ctVal (base coin for linear swaps, USD for inverse swaps). sum_open_interest_value is in USD.
+Bitget Futures: sum_open_interest is in the base coin. From the 2026-09 data-integrity release, sum_open_interest_value is the open interest multiplied by the mark price. Before this release, the column was empty.
+Kraken Futures: Inverse contracts (PI_, FI_) are USD contracts. From the 2026-09 data-integrity release, their sum_open_interest_value is the number of contracts multiplied by the contract size in USD. Earlier files multiplied it by the price. We corrected these files on 2026-09-30. Linear PF_ contracts are not affected.
+Lighter: From the 2026-09 data-integrity release, sum_open_interest is in base units, and sum_open_interest_value is the USD notional. Earlier files had the USD notional in sum_open_interest. We corrected these files on 2026-09-30.
+Binance Futures: Older open interest files can repeat snapshots that we already published in earlier hours. Remove duplicates on (symbol, timestamp). The SDK function get_open_interest already does this in each download. We plan a cleanup of the published history.
+Bybit Futures: Before the 2026-09 data-integrity release, ticker, mark price and open interest rows were change-only deltas. A field that did not change in a message is null. An open interest file exists only for hours in which open interest changed. Forward-fill the values for each symbol, and look back into earlier hours if necessary. From the release, each row contains the full carried-forward state. After a collector loses its state, the first hour contains only the fields that the collector received during that hour.
+Bybit Futures: From the 2026-09 data-integrity release, each symbol with a known open interest has a carried-forward row at the start of each hour. In this row, timestamp and received_time are both equal to the start of the hour. There is no flag column. Use these two values to identify the row.
+Bybit, OKX: The published open interest comes from the WebSocket ticker and open-interest channels. We do not publish the output of the REST open-interest pollers.
+BitMEX: Quantities are in raw units that are different for each instrument: XBTUSD in USD contracts, XBTUSDT in 1e-6 BTC, ETHUSDT in 1e-5 ETH, and spot pairs in 1e-8 of the base asset. Before you compare with other venues, check the multiplier of the instrument.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Open Interest Metrics
+Open Interest Quantity
+Total size of outstanding positions
+The sum_open_interest field
+In the unit of the venue: base asset or contracts
+Shows the level of market participation
+Higher values show more activity
+Notional Value
+Total dollar value of outstanding positions
+The sum_open_interest_value field
+In the quote currency
+Includes the effect of current price levels
+Better to compare different symbols
+Uses for Market Analysis
+Main Use Cases
+Market Sentiment: When OI and price increase together, this can show bullish sentiment.
+Trend Strength: When OI increases, this confirms that the trend continues.
+Reversal Signals: A divergence between price and OI can show a reversal.
+Liquidity Assessment: Higher OI usually means better liquidity.
+Risk Management: Monitor OI changes when you decide the size of a position.
+Use the Data
+Python
+Copy
+1# Detailed open interest analysis
+2import cryptohftdata as chd
+3import pandas as pd
+4import matplotlib.pyplot as plt
+5import numpy as np
+6
+7# Initialize the client
+8client = chd.CryptoHFTDataClient(api_key="your-api-key-here")
+9
+10# Get open interest data
+11oi_df = client.get_open_interest(
+12    symbol="BTCUSDT",
+13    exchange=chd.exchanges.BINANCE_FUTURES,
+14    start_date="2025-08-01",
+15    end_date="2025-08-01"
+16)
+17
+18# Get price data for comparison
+19price_df = client.get_ticker(
+20    symbol="BTCUSDT",
+21    exchange=chd.exchanges.BINANCE_FUTURES,
+22    start_date="2025-08-01",
+23    end_date="2025-08-01"
+24)
+25
+26# Convert to numeric for analysis
+27oi_df['oi_quantity'] = oi_df['sum_open_interest'].astype(float)
+28oi_df['oi_value'] = oi_df['sum_open_interest_value'].astype(float)
+29price_df['price'] = price_df['last_price'].astype(float)
+30
+31# Calculate OI changes
+32oi_df['oi_change'] = oi_df['oi_quantity'].diff()
+33oi_df['oi_change_pct'] = (oi_df['oi_change'] / oi_df['oi_quantity'].shift(1)) * 100
+34
+35# Merge with price data for correlation analysis
+36merged_df = pd.merge_asof(
+37    oi_df.sort_values('timestamp'), 
+38    price_df.sort_values('event_time')[['event_time', 'price']], 
+39    left_on='timestamp', right_on='event_time',
+40)
+41
+42# Calculate price changes
+43merged_df['price_change'] = merged_df['price'].diff()
+44merged_df['price_change_pct'] = (merged_df['price_change'] / merged_df['price'].shift(1)) * 100
+45
+46# Analyze OI-Price relationship
+47correlation = merged_df['oi_change_pct'].corr(merged_df['price_change_pct'])
+48print(f"OI vs Price Change Correlation: {correlation:.4f}")
+49
+50# Identify key patterns
+51merged_df['oi_price_divergence'] = np.where(
+52    (merged_df['oi_change_pct'] > 0) & (merged_df['price_change_pct'] < 0), 'Bearish Divergence',
+53    np.where(
+54        (merged_df['oi_change_pct'] < 0) & (merged_df['price_change_pct'] > 0), 'Bullish Divergence',
+55        'Aligned'
+56    )
+57)
+58
+59# Plot analysis
+60fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+61
+62# OI quantity over time
+63ax1.plot(merged_df.index, merged_df['oi_quantity'], label='Open Interest', color='blue')
+64ax1.set_title('Open Interest Quantity')
+65ax1.set_ylabel('Contracts')
+66ax1.legend()
+67
+68# OI value over time
+69ax2.plot(merged_df.index, merged_df['oi_value'], label='OI Value', color='green')
+70ax2.set_title('Open Interest Value')
+71ax2.set_ylabel('USDT')
+72ax2.legend()
+73
+74# Price vs OI changes
+75ax3.scatter(merged_df['price_change_pct'], merged_df['oi_change_pct'], alpha=0.6)
+76ax3.set_xlabel('Price Change %')
+77ax3.set_ylabel('OI Change %')
+78ax3.set_title(f'OI vs Price Changes (Corr: {correlation:.3f})')
+79ax3.grid(True, alpha=0.3)
+80
+81# OI change distribution
+82ax4.hist(merged_df['oi_change_pct'].dropna(), bins=30, alpha=0.7, color='orange')
+83ax4.set_xlabel('OI Change %')
+84ax4.set_ylabel('Frequency')
+85ax4.set_title('OI Change Distribution')
+86
+87plt.tight_layout()
+88plt.show()
+89
+90# Summary statistics
+91print("Open Interest Analysis Summary:")
+92print("Average OI Quantity:", merged_df['oi_quantity'].mean(), "contracts")
+93print("Average OI Value: $", merged_df['oi_value'].mean())
+94print("OI Volatility:", merged_df['oi_change_pct'].std(), "%")
+95print("Max OI:", merged_df['oi_quantity'].max(), "contracts")
+96print("Min OI:", merged_df['oi_quantity'].min(), "contracts")Previous · Python SDKMark PriceNext · Python SDKLiquidations
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

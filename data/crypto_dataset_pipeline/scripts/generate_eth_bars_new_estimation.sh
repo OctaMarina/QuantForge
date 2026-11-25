@@ -44,14 +44,14 @@ generate() {
 }
 
 # VOLUME BARS (ETH)
-generate volume 6000 25
-generate volume 3000 50
-generate volume 1500 100
+generate volume 19600 25
+generate volume 9800 50
+generate volume 4900 100
 
-# NOTIONAL BARS (USDT)
-generate notional 15000000 25
-generate notional 7500000 50
-generate notional 3700000 100
+# NOTIONAL / DOLLAR BARS (USDT)
+generate notional 48300000 25
+generate notional 24150000 50
+generate notional 12075000 100
 
 echo "========================================"
 echo "All 6 datasets generated successfully!"

@@ -1,0 +1,32 @@
+# Examples of every bar type and variant supported by chdds (copy the entries you need into an experiment config).
+# Each entry yields its own spec_id (hash of the normalised spec + convention version), so variants never collide.
+dataset:
+  name: examples_all_bar_types
+  start: 2026-10-01
+  end: 2026-10-07
+bars:
+  # --- time bars on the availability clock: [T_k, T_k+Δ), event at T_{k+1} goes to the next bar
+  - {name: time_1s,  kind: time, threshold: 1}
+  - {name: time_15m, kind: time, threshold: 900}
+  - {name: time_1h_origin_0030, kind: time, threshold: 3600, origin_ns: 1800000000000}   # grid offset by 30 min
+  # --- volume bars (BTC): closes at the first trade with cumulated volume >= threshold; no trade splitting
+  - {name: volume_100btc, kind: volume, threshold: 100}
+  - {name: volume_adapt5m, kind: volume, adaptive: {target_s: 300, lookback_days: 14}}   # median 5-min volume of prior 14 days
+  - {name: volume_100btc_dailyreset, kind: volume, threshold: 100, daily_reset: true}    # open bar closed as partial at 00:00 UTC
+  # --- dollar (USDT notional) bars: notional of each execution (price*qty), not volume*close
+  - {name: dollar_20musdt, kind: dollar, threshold: 20000000}
+  - {name: dollar_adapt60s, kind: dollar, adaptive: {target_s: 60, lookback_days: 7}}
+  # --- CUSUM bars: filter sets the boundaries; ALL trades between boundaries are aggregated
+  - {name: cusum_2bps,  kind: cusum, threshold: 2}                         # h = log(1 + 2e-4); reset only the triggered side
+  - {name: cusum_2bps_both, kind: cusum, threshold: 2, cusum_reset: both}  # distinct variant: reset both accumulators
+  - {name: cusum_20bps, kind: cusum, threshold: 20}
+  - {name: cusum_adapt_c2, kind: cusum, adaptive: {c: 2.0, lookback_days: 7}}   # h = 2 x std(1-min log returns, prior 7 d)
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+  trades:
+    flow_windows_s: [5, 30, 120, 900]
+    return_windows_s: [30, 120, 900, 3600]
+  book:
+    windows_s: [1, 5, 30, 120]
+  select: ["bar_*", "tfi_*", "ret_*", "rv_*", "ofi_*", "spread_bps", "qi_*", "basis_*", "funding_*", "oi_*", "liq_*"]
+workers: 4

@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from . import __version__, config as cfgmod, instruments, timeutil as tu
-from .bars import BarBuilder, bars_to_float, GapPolicyHalt, S_NEXT_BUCKET
+from .bars import BarBuilder, bars_to_float, check_int64_sums, GapPolicyHalt, OUT_INT, S_NEXT_BUCKET
 from .coverage import feature_month_coverage, summarize, source_coverage
 from . import status as status_mod
 from .features import basic, flow, structural, crossmarket, external, options, liquidations, book_features, quotes
@@ -216,7 +216,7 @@ class Pipeline:
         T["daily_close"] = self._klines_range(dmarket, sym, "1d", self.daily_start, e, allow_fetch=allow_fetch)
         usdt = {}
         ps = (self.start // tu.DAY - int(self.cfg["features"]["premium"]["z_window_days"]) - 5) * tu.DAY
-        for a in list(dict.fromkeys(list(self.cfg["features"]["premium"]["context_assets"]) + [self.spec.base])):
+        for a in cfgmod.premium_assets(self.cfg):
             usdt[a] = self._klines_range("spot", f"{a}USDT", "1m", ps, e, allow_fetch=allow_fetch)
         T["usdt_1m"] = usdt
 
@@ -236,15 +236,29 @@ class Pipeline:
     def _load_coinbase(self, allow_fetch=False):
         pc = self.cfg["features"]["premium"]
         s = (self.start // tu.DAY - int(pc["z_window_days"]) - 5) * tu.DAY
-        out = {}
+        out, reasons = {}, {}
         if self.offline or not allow_fetch:
             # rebuild from cached raw pages only
             allow = False
         else:
             allow = True
-        for a in list(dict.fromkeys(list(pc["context_assets"]) + [self.spec.base])):
-            out[a] = self._coinbase_cached(f"{a}-USD", s, self.end, allow)
+        # one product per asset: a product the venue does not list (or an outage on it) only nulls that
+        # asset's premium columns instead of failing the whole family
+        for a in cfgmod.premium_assets(self.cfg):
+            product = cfgmod.premium_usd_product(self.cfg, a)
+            try:
+                out[a] = self._coinbase_cached(product, s, self.end, allow)
+            except SourceUnreachable as e:
+                out[a], reasons[a] = None, "source_unreachable"
+                self._status(f"coinbase_{product}", False, f"source_unreachable: {e}")
+            except Exception as e:
+                out[a], reasons[a] = None, "missing_source_data"
+                self._status(f"coinbase_{product}", False, f"{type(e).__name__}: {e}")
+            else:
+                rows = 0 if out[a] is None else len(out[a])
+                self._status(f"coinbase_{product}", out[a] is not None, f"{rows} 1m candles")
         self.tables["usd_1m"] = out
+        self.tables["premium_missing_reason"] = reasons
         self.tables["fx_1m"] = self._coinbase_cached(pc["fx_product"], s, self.end, allow)
 
     def _coinbase_cached(self, product, s, e, allow):
@@ -419,7 +433,7 @@ class Pipeline:
                 self._status(key, False, f"{type(e).__name__}: {e}")
         self._load_live_tables()
         px1s = self._read_px1s(px_dir)
-        out_dir = self.root / "datasets" / cfgmod.config_hash(cfg)
+        out_dir = self.root / "datasets" / cfgmod.dataset_name(cfg)
         out_dir.mkdir(parents=True, exist_ok=True)
         qa = builders.pop("_qa1m", None)
         manifest = self._manifest_base(builders, missing_days)
@@ -502,6 +516,8 @@ class Pipeline:
             return None
         df = pd.concat([read_parquet(p) for p in parts], ignore_index=True)
         df = df.sort_values("bar_seq").drop_duplicates("bar_seq", keep="last").reset_index(drop=True)
+        # bars persisted by an earlier run (days skipped on restart) are re-verified as well
+        check_int64_sums(df[OUT_INT].to_numpy(np.int64), self.spec)
         return bars_to_float(df, self.spec)
 
     def _write_px1s(self, df: pd.DataFrame, path: Path):
@@ -725,6 +741,7 @@ class Pipeline:
             "generated_at": tu.to_iso(tu.now_us()), "package_version": __version__, "code_sha256": h.hexdigest(),
             "python": sys.version, "platform": platform.platform(), "dependencies": deps,
             "config": json.loads(json.dumps(self.cfg, default=str)), "config_hash": cfgmod.config_hash(self.cfg),
+            "dataset_name": cfgmod.dataset_name(self.cfg), "premium_assets": cfgmod.premium_assets(self.cfg),
             "docs_verified_on": DOCS_VERIFIED_ON, "strictness": self.cfg["timing"]["strictness"],
             "replay_mode": self.cfg["timing"]["replay_mode"],
             "temporal_evidence_level": ("market_time_replay: exchange timestamps/sequence; no measured live latency"
@@ -791,7 +808,8 @@ def table_inventory(T: dict) -> dict:
         if isinstance(v, pd.DataFrame):
             out[k] = int(len(v))
         elif isinstance(v, dict):
-            out[k] = {kk: (int(len(vv)) if isinstance(vv, pd.DataFrame) else (None if vv is None else "present"))
+            out[k] = {kk: (int(len(vv)) if isinstance(vv, pd.DataFrame) else
+                           (None if vv is None else (vv if isinstance(vv, str) else "present")))
                       for kk, vv in v.items()}
         elif callable(v):
             out[k] = "stream"

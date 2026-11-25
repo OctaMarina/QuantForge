@@ -8,7 +8,7 @@ Layout under ``storage.root``::
     raw/<source>/_revisions.jsonl             one record per detected revision
     normalized/<table>/...                    normalised / reconstructed tables (parquet)
     state/<series_id>/...                     restartable builder state
-    datasets/<config_hash>/...                final datasets, manifest, registry, coverage
+    datasets/<dataset_name>/...               final datasets, manifest, registry, coverage (config.dataset_name)
     live/<stream>/<YYYY-MM-DD>/<HH>.jsonl.gz  raw live messages with received_at
 """
 from __future__ import annotations

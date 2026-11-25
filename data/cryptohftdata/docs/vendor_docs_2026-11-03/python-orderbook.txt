@@ -1,0 +1,206 @@
+Python SDK Order Book | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKOrder Book
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Order Book Data
+Download Order Book Snapshots
+Download order book snapshots that show the bid and ask levels with their prices and quantities.
+SDKclient.get_orderbook()
+Python SDK Example
+Python
+Copy
+1# Get order book snapshots
+2df = client.get_orderbook(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_SPOT,
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes bid/ask levels with prices and quantities
+10print(df.head())
+11
+Data Format - CommonOrderbookEvent
+We keep order book data in the CommonOrderbookEvent structure. This structure contains both the snapshots and the incremental updates from the exchanges:
+Schema Overview
+Each order book event contains time data, exchange metadata, and individual price level updates for bids or for asks.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the event
+ | event_time | INT64 | No | Unix timestamp when the exchange generated the event (the time unit changes with the exchange)
+ | transaction_time | INT64 | Yes | Exchange-specific transaction timestamp (if available)
+ | symbol | STRING | No | Trading pair symbol (for example, "BTCUSDT")
+ | event_type | STRING | No | Type of order book event ("snapshot" or "update")
+ | first_update_id | INT64 | Yes | First update ID in the update sequence
+ | final_update_id | INT64 | Yes | Final update ID in the update sequence
+ | prev_final_update_id | INT64 | Yes | Previous final update ID (to find gaps)
+ | last_update_id | INT64 | Yes | Last update ID that the exchange processed
+ | side | STRING | No | Order book side ("bid" or "ask")
+ | price | STRING | No | Price level (stored as string for precision)
+ | quantity | STRING | No | Quantity at the price level (stored as string for precision). The unit is the base asset on most venues. OKX derivatives use contracts, and BitMEX uses raw instrument units (refer to the venue notes)
+ | order_count | INT64 | Yes | Number of orders at this price level (if the exchange gives it)
+Venue-specific semantics
+Kraken Spot: The Kraken spot order book feed keeps a window of 1,000 levels on each side. It does not delete levels that move out of the window. From the 2026-09 data-integrity release, we publish these levels as delete rows. Thus, a plain replay stays within 1,000 levels on each side. For earlier files, keep only the best 1,000 levels on each side after each update.
+Hour-start snapshots: Binance (spot and futures), Aster, OKX, Bybit, Bitget, Lighter, Kraken Futures and Hyperliquid files can start with a checkpoint snapshot of the order book at the hour boundary. Kraken spot and BitMEX files do not. We write a checkpoint only when we can prove that the order book is current. Thus, some hours start without one. In that case, continue from the order book of the previous hour, or wait for the next snapshot in the file.
+Binance, Aster: From 2026-09-30, collectors that we started or restarted with the updated version publish each accepted REST depth snapshot one time. Older files can contain identical consecutive copies of the same snapshot (on Binance, one copy can have received_time = event_time × 1e6). These identical copies do not change the reconstructed order book. We do not plan an archive-wide cleanup, because the impact is low. Replay the files in their published message order with the native sequence IDs, and do not sort only by event_time. Duplicate copies can change snapshot counts and the analysis of receipt times.
+Lighter: From the 2026-09 data-integrity release, final_update_id is the Lighter nonce, and prev_final_update_id is the Lighter begin_nonce. The prev_final_update_id of each update is equal to the final_update_id of the previous update. A snapshot starts a new chain. Thus, a mismatch is a gap. last_update_id contains the offset of the API server, which puts messages in order but is not contiguous. In earlier files, final_update_id and last_update_id both contain the offset, and prev_final_update_id is empty. The offset starts again when a reconnect goes to a different Lighter server. Thus, a lower value after a reconnect is normal, and you cannot find gaps. Treat a crossed order book as not valid, and continue from the next snapshot.
+OKX perpetual swaps: Sizes are in contracts. Multiply each size by the contract value of the instrument (ctVal from the OKX instruments endpoint, in ctValCcy units). This unit is the base coin for linear swaps, for example BTC-USDT-SWAP. It is USD for inverse swaps, for example BTC-USD-SWAP. OKX spot sizes are already in the base coin.
+BitMEX: Quantities are in raw units that are different for each instrument: XBTUSD in USD contracts, XBTUSDT in 1e-6 BTC, ETHUSDT in 1e-5 ETH, and spot pairs in 1e-8 of the base asset. Before you compare with other venues, check the multiplier of the instrument.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Event Types
+Snapshot Events
+Full state of the order book at one point in time
+event_type = "snapshot"
+Contains all bid/ask levels
+You use it to initialize the order book
+Replaces the previous state with new data
+Update Events
+Incremental changes to the order book
+event_type = "update"
+Change to one price level
+quantity = "0" removes the level
+Use the Data
+Python
+Copy
+1# Reconstruct orderbook from events
+2import cryptohftdata as chd
+3from datetime import datetime, timedelta
+4import tqdm
+5
+6# Initialize the client
+7client = chd.CryptoHFTDataClient(api_key="your-api-key-here")
+8
+9# Load orderbook events
+10df = client.get_orderbook(
+11    symbol="BTCUSDT",
+12    exchange=chd.exchanges.BINANCE_FUTURES,
+13    start_date="2025-08-01",
+14    end_date="2025-08-01"
+15)
+16
+17# Convert price and quantity to float
+18df["price"] = df["price"].astype(float)
+19df["quantity"] = df["quantity"].astype(float)
+20
+21# Reconstruct the final orderbook
+22orderbook = {
+23    'bid': {},
+24    'ask': {}
+25}
+26
+27was_prev_snapshot = False
+28# Create numpy arrays for faster processing
+29import numpy as np
+30prices = np.array(df["price"])
+31quantities = np.array(df["quantity"])
+32event_types = np.array(df["event_type"])
+33sides = np.array(df["side"])
+34
+35for i in tqdm.tqdm(range(len(df))):
+36    price = prices[i]
+37    quantity = quantities[i]
+38    event_type = event_types[i]
+39    side = sides[i]
+40
+41    if event_type == "snapshot":
+42        if not was_prev_snapshot:
+43            # Clear the orderbook as this is the start of a new snapshot
+44            orderbook = {
+45                'bid': {},
+46                'ask': {}
+47            }
+48        was_prev_snapshot = True
+49    else:
+50        was_prev_snapshot = False
+51
+52    if quantity == 0:
+53        # Remove the price level if quantity is zero
+54        orderbook[side].pop(price, None)
+55    else:
+56        # Update the orderbook with the new price level
+57        orderbook[side][price] = quantity
+58
+59# Example: Print top 5 bid levels
+60print("Top 5 Bid Levels:")
+61for price, quantity in sorted(orderbook['bid'].items(), key=lambda x: x[0], reverse=True)[:5]:
+62    print(f"Price: {price}, Quantity: {quantity}")
+63
+More Information
+Our blog post gives a detailed tutorial about how to examine order book data. It includes comparisons of exchanges and visualization: How to Download Historical Crypto Orderbook Data with PythonPrevious · Python SDKDiscover SymbolsNext · Python SDKTrades
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

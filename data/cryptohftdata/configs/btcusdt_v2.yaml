@@ -1,0 +1,24 @@
+# Regeneration configuration: same bars and windows as btcusdt_initial, corrected resolver, book reconstruction with certificate.
+# Thresholds are either round exploratory values (not chosen on data) or causal daily schedules
+# computed only from strictly previous days (§7.6). Nothing here was tuned on predictive results.
+dataset:
+  name: btcusdt_v2
+  start: 2025-06-28
+  end: 2026-10-31
+bars:
+  - {name: time_1m,  kind: time, threshold: 60}
+  - {name: time_5m,  kind: time, threshold: 300}
+  - {name: volume_50btc,    kind: volume, threshold: 50}
+  - {name: volume_adapt60s, kind: volume, adaptive: {target_s: 60, lookback_days: 7}}
+  - {name: dollar_5musdt,   kind: dollar, threshold: 5000000}
+  - {name: dollar_adapt60s, kind: dollar, adaptive: {target_s: 60, lookback_days: 7}}
+  - {name: cusum_5bps,      kind: cusum, threshold: 5}
+  - {name: cusum_10bps,     kind: cusum, threshold: 10}
+  - {name: cusum_adapt_c1,  kind: cusum, adaptive: {c: 1.0, lookback_days: 7}}
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+  book:
+    book_mode: rebuilt             # anchored where a snapshot connects, rebuilt with certificate otherwise (book_state 0 / 9 / 10)
+    checkpoint_cert_levels: 500
+  # select: ["bar_*", "tfi_*", "ret_*"]     # optional experiment column selection (globs)
+workers: 8

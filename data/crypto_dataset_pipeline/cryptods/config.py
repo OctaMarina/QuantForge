@@ -99,6 +99,8 @@ DEFAULTS: dict = {
         "premium": {
             "usd_venue": "coinbase",
             "context_assets": ["BTC", "ETH"],
+            "include_instrument_base": True,  # the built asset (e.g. SOL for SOLUSDT) is always added
+            "usd_products": {},          # asset -> USD-venue product override; default "<ASSET>-USD"
             "fx_product": "USDT-USD",
             "minute_tolerance": "0s",    # FX/prices must be in the same closed minute
             "daily_min_coverage": 0.9,
@@ -131,6 +133,10 @@ DEFAULTS: dict = {
     },
     "storage": {
         "root": "./data",
+        # Output directory under datasets/: "auto" -> <SYMBOL>_<market>_<bar>_<threshold>_<start>-<end>_<hash8>
+        # (see dataset_name); any other string is used verbatim.
+        "dataset_name": "auto",
+        "dataset_tag": None,             # optional label in the auto name, e.g. "25pd" (target bars/day)
         "max_download_gb": 50,
         "request_timeout_s": 30,
         "retries": 5,
@@ -206,8 +212,14 @@ def validate(cfg: dict):
     ins = cfg["instrument"]
     if ins["market_type"] not in ("spot", "perpetual"):
         raise ValueError("instrument.market_type must be spot or perpetual")
+    ins["base"], ins["quote"] = str(ins["base"]).upper(), str(ins["quote"]).upper()
     if not ins.get("symbol"):
-        ins["symbol"] = f"{ins['base']}{ins['quote']}".upper()
+        ins["symbol"] = f"{ins['base']}{ins['quote']}"
+    ins["symbol"] = str(ins["symbol"]).upper()
+    if ins["exchange"] == "binance" and ins["symbol"] != f"{ins['base']}{ins['quote']}":
+        # base drives the per-asset features (Coinbase premium, ...): a mismatch silently mixes two assets
+        raise ValueError(f"instrument.symbol={ins['symbol']} does not match instrument.base+quote="
+                         f"{ins['base']}{ins['quote']}; set instrument.base/quote (symbol is derived)")
     p = cfg["period"]
     s, e, o = tu.parse_time(p["start"]), tu.parse_time(p["end"]), tu.parse_time(p["bar_origin"])
     if not s < e:
@@ -250,13 +262,36 @@ def validate(cfg: dict):
         raise ValueError("structural.sdfc_trim must be in (0, 0.5)")
     if st["formula_gate"] not in ("task_spec", "primary_verified_only"):
         raise ValueError("structural.formula_gate must be task_spec or primary_verified_only")
+    pc = cfg["features"]["premium"]
+    pc["context_assets"] = [str(a).upper() for a in (pc.get("context_assets") or [])]
+    pc["usd_products"] = {str(k).upper(): str(v) for k, v in (pc.get("usd_products") or {}).items()}
+    name = cfg["storage"].get("dataset_name") or "auto"
+    if name != "auto" and ("/" in str(name) or str(name) in (".", "..")):
+        raise ValueError("storage.dataset_name must be 'auto' or a plain directory name")
+    tag = cfg["storage"].get("dataset_tag")
+    if tag is not None and not str(tag).replace("-", "").replace(".", "").isalnum():
+        raise ValueError("storage.dataset_tag may only contain letters, digits, '-' and '.'")
+
+
+def premium_assets(cfg: dict) -> list[str]:
+    """Assets with a USD-vs-USDT premium: the context assets plus (by default) the built instrument's base."""
+    pc = cfg["features"]["premium"]
+    assets = [str(a).upper() for a in pc["context_assets"]]
+    if pc.get("include_instrument_base", True):
+        assets.append(str(cfg["instrument"]["base"]).upper())
+    return list(dict.fromkeys(assets))
+
+
+def premium_usd_product(cfg: dict, asset: str) -> str:
+    return (cfg["features"]["premium"].get("usd_products") or {}).get(asset.upper(), f"{asset.upper()}-USD")
 
 
 def _canon(obj) -> str:
     return json.dumps(obj, sort_keys=True, default=str, separators=(",", ":"))
 
 
-NON_SEMANTIC = {"storage": ("root", "rate_limit_per_s", "request_timeout_s", "retries", "backoff_s", "max_download_gb")}
+NON_SEMANTIC = {"storage": ("root", "dataset_name", "dataset_tag", "rate_limit_per_s", "request_timeout_s", "retries", "backoff_s",
+                            "max_download_gb")}
 
 
 def config_hash(cfg: dict) -> str:
@@ -299,6 +334,38 @@ def series_id(cfg: dict, bar_type: str) -> str:
     ident = series_identity(cfg, bar_type)
     h = hashlib.sha256(_canon(ident).encode()).hexdigest()[:12]
     return f"{cfg['instrument']['exchange']}_{cfg['instrument']['market_type']}_{cfg['instrument']['symbol']}_{bar_type}_{h}"
+
+
+def _plain_decimal(v) -> str:
+    return format(Decimal(str(v)).normalize(), "f")
+
+
+def dataset_name(cfg: dict, chash: str | None = None) -> str:
+    """Readable output directory, e.g. SOLUSDT_spot_volume_168000_25pd_20210901-20260901_1a2b3c4d
+    (``25pd`` = optional storage.dataset_tag).
+
+    The config-hash suffix keeps builds that differ only in other settings (features, timing, ...) apart,
+    so the prefix-invariance check of an update still compares like with like."""
+    name = cfg["storage"].get("dataset_name") or "auto"
+    if name != "auto":
+        return str(name)
+    ins, b = cfg["instrument"], cfg["bars"]
+    parts = [ins["symbol"], ins["market_type"]]
+    for t in b["types"]:
+        if t == "time":
+            parts += ["time", str(b["time"]["interval"])]
+        else:
+            parts += [t, _plain_decimal(b[t]["threshold"])]
+    if b["adaptive"]["enabled"]:
+        parts.append(f"adaptive{b['adaptive']['target_bars_per_day']}pd")
+    if b["trade_source"] != "trades":
+        parts.append(b["trade_source"])
+    if cfg["storage"].get("dataset_tag") is not None:
+        parts.append(str(cfg["storage"]["dataset_tag"]))
+    s, e = (tu.to_iso(tu.parse_time(cfg["period"][k]))[:10].replace("-", "") for k in ("start", "end"))
+    parts.append(f"{s}-{e}")
+    parts.append((chash or config_hash(cfg))[:8])
+    return "_".join(parts)
 
 
 def dump(cfg: dict, path: Path):

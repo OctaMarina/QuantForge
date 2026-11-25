@@ -1,0 +1,19 @@
+# Optional rebuilt mode (D1), demonstration on a subset of the months without anchors. Separate dataset: the strict
+# outputs are not touched. Features are emitted only under the exact protocol certificate; see docs/D1_REPORT.md.
+# Second subset, crash included:  --set dataset.name=rebuilt_demo_crash --set dataset.start=2025-10-09 --set dataset.end=2025-10-11
+dataset:
+  name: rebuilt_demo
+  start: 2025-12-14
+  end: 2025-12-16
+bars:
+  - {name: time_1m,  kind: time, threshold: 60}
+  - {name: time_5m,  kind: time, threshold: 300}
+  - {name: volume_50btc,  kind: volume, threshold: 50}
+  - {name: dollar_5musdt, kind: dollar, threshold: 5000000}
+  - {name: cusum_5bps,    kind: cusum, threshold: 5}
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+  book:
+    book_mode: rebuilt
+    checkpoint_cert_levels: 500
+workers: 3

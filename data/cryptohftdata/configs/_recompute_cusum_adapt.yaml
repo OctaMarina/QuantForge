@@ -1,0 +1,8 @@
+# Maintenance config: recompute feature parts of one bar set inside the btcusdt_initial dataset
+# (same dataset name -> same output directories). Used after the adaptive-CUSUM engine fix of 2026-11-04.
+dataset: {name: btcusdt_initial, start: 2025-06-28, end: 2026-10-31}
+bars:
+  - {name: cusum_adapt_c1, kind: cusum, adaptive: {c: 1.0, lookback_days: 7}}
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+workers: 4

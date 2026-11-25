@@ -1,0 +1,422 @@
+Binance Futures Wire Format | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Exchange Wire FormatsBinance Futures
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Exchange Wire Formats
+Binance Futures wire format
+This page shows how Binance USDⓈ-M Futures messages become rows in our Parquet files. For each data type below, you see a real message next to the rows that we publish for it. The page also gives the source and the rule for each column. Put the pointer on a line or a column to see how they connect.
+Checked against our pipeline
+We recorded these messages from Binance USDⓈ-M Futures on 2026-10-05. Our test suite replays each message through the production collector parser and the postprocessor. The test fails if the published rows are different from the rows on this page. Files that we wrote before a change to the pipeline can be different. Refer to Known Gaps & Corrections.
+Public WebSocket (order book, trades): wss://fstream.binance.com/public/stream?streams=<symbol>@depth@0ms/<symbol>@trade
+Market WebSocket (ticker, mark price, liquidations): wss://fstream.binance.com/market/stream?streams=!ticker@arr/!markPrice@arr@1s/!forceOrder@arr
+REST: https://fapi.binance.com
+Exchange API reference: developers.binance.com. For the conventions that apply to all exchanges, refer to the wire formats overview.
+Trades
+One row per trade from the <symbol>@trade stream.
+WebSocket <symbol>@trade
+Trade
+WebSocket message · <symbol>@tradereceived 2026-10-05 19:01:48.989326 UTC
+{
+  "stream": "btcusdt@trade",
+  "data": {
+    "e": "trade",
+    "E": 1791226908849,→ event_time
+    "T": 1791226908849,→ trade_time
+    "s": "BTCUSDT",→ symbol
+    "t": 8148200197,→ trade_id
+    "p": "85583.20",→ price
+    "q": "0.064",→ quantity
+    "X": "MARKET",→ order_type
+    "m": true,→ is_buyer_maker
+    "st": 1
+  }
+}
+Published row
+ColumnValueFromRule
+received_time1791226908989326000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226908849data.ECopied. Milliseconds.
+symbolBTCUSDTdata.sCopied.
+trade_id8148200197data.tCopied.
+price85583.20data.pCopied as the exact decimal string that Binance sent.
+quantity0.064data.qCopied as the exact decimal string. Base asset units.
+trade_time1791226908849data.TCopied. Milliseconds.
+is_buyer_makertruedata.mCopied. true means the seller was the aggressor.
+order_typeMARKETdata.XCopied. MARKET if Binance does not send the field.
+Non-market trade (X: "NA")
+Binance also sends trade events with the order type NA, and with price and quantity 0. Their trade IDs are in the same sequence as the IDs of market trades. We publish these events without changes.
+WebSocket message · <symbol>@tradereceived 2026-10-05 18:54:51.658000 UTC
+{
+  "stream": "btcusdt@trade",
+  "data": {
+    "e": "trade",
+    "E": 1791226491521,→ event_time
+    "T": 1791226491521,→ trade_time
+    "s": "BTCUSDT",→ symbol
+    "t": 8148193400,→ trade_id
+    "p": "0",→ price
+    "q": "0",→ quantity
+    "X": "NA",→ order_type
+    "m": false,→ is_buyer_maker
+    "st": 1
+  }
+}
+Published row
+ColumnValueFromRule
+received_time1791226491658000000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226491521data.ECopied. Milliseconds.
+symbolBTCUSDTdata.sCopied.
+trade_id8148193400data.tCopied.
+price0data.pCopied as the exact decimal string that Binance sent.
+quantity0data.qCopied as the exact decimal string. Base asset units.
+trade_time1791226491521data.TCopied. Milliseconds.
+is_buyer_makerfalsedata.mCopied. true means the seller was the aggressor.
+order_typeNAdata.XCopied. MARKET if Binance does not send the field.
+Notes
+Rows with order_type NA have price and quantity 0. Remove these rows before you calculate volume, VWAP or price statistics. Keep them if you use trade_id to find gaps.
+For the column types and descriptions, refer to the Trades schema.
+Order Book
+One row per price level. Updates come from the <symbol>@depth@0ms stream. REST snapshots set the initial state of the order book.
+WebSocket <symbol>@depth@0ms
+REST GET /fapi/v1/depth
+Depth update
+Shortened: Binance sent 14 bid levels and 8 ask levels in this message. This example shows the two highest bids and the three lowest asks.
+WebSocket message · <symbol>@depth@0msreceived 2026-10-05 19:01:38.340225 UTC
+{
+  "stream": "btcusdt@depth@0ms",
+  "data": {
+    "e": "depthUpdate",→ event_type
+    "E": 1791226898196,→ event_time
+    "T": 1791226898194,→ transaction_time
+    "s": "BTCUSDT",→ symbol
+    "ps": "BTCUSDT",
+    "U": 11742309239582,→ first_update_id
+    "u": 11742309241602,→ final_update_id
+    "pu": 11742309239523,→ prev_final_update_id
+    "b": [→ side
+      ["85547.70", "0.020"],→ side · price · quantity
+      ["85580.30", "0.355"]→ side · price · quantity
+    ],
+    "a": [→ side
+      ["85601.90", "2.784"],→ side · price · quantity
+      ["85605.10", "0.001"],→ side · price · quantity
+      ["85723.10", "0.000"]→ side · price · quantity
+    ],
+    "st": 1
+  }
+}
+Published rows · 5
+ask 85601.90ask 85605.10ask 85723.10bid 85547.70bid 85580.30
+ColumnValueFromRule
+received_time1791226898340225000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226898196data.ECopied. Milliseconds.
+transaction_time1791226898194data.TCopied. Milliseconds.
+symbolBTCUSDTdata.sCopied.
+event_typeupdatedata.eupdate for every depthUpdate message.
+first_update_id11742309239582data.UCopied.
+final_update_id11742309241602data.uCopied.
+prev_final_update_id11742309239523data.puCopied. Equal to the u of the previous message. A different value shows a gap.
+last_update_idnull—Null. Depth updates do not contain a separate last update ID.
+sideaskdata.bdata.abid for levels in b, ask for levels in a. One row per level.
+price85601.90data.b[][0]data.a[][0]Copied as the exact decimal string.
+quantity2.784data.b[][1]data.a[][1]Copied as the exact decimal string. The value is the new total at that price. 0.000 removes the level.
+order_countnull—Null. Binance does not send order counts.
+REST depth snapshot
+The collector requests a REST snapshot when it connects. It also requests one after a sequence gap, when it must reset its order book. We publish only the snapshots that the collector applied to its order book. Each level becomes one snapshot row.
+Shortened: We requested this example with limit=5 to keep it short. The collector requests limit=500, or limit=100 when it resets many order books at the same time.
+REST responsereceived 2026-10-05 18:55:29.504069 UTC
+GET https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=5
+{
+  "lastUpdateId": 11742279126574,→ final_update_id · last_update_id
+  "E": 1791226529372,→ event_time
+  "T": 1791226529369,→ transaction_time
+  "bids": [→ side
+    ["85583.10", "4.900"],→ side · price · quantity
+    ["85583.00", "0.016"],→ side · price · quantity
+    ["85582.90", "0.002"],→ side · price · quantity
+    ["85582.50", "0.001"],→ side · price · quantity
+    ["85582.40", "0.002"]→ side · price · quantity
+  ],
+  "asks": [→ side
+    ["85583.20", "5.022"],→ side · price · quantity
+    ["85583.30", "0.003"],→ side · price · quantity
+    ["85583.40", "0.060"],→ side · price · quantity
+    ["85583.50", "0.006"],→ side · price · quantity
+    ["85583.70", "0.002"]→ side · price · quantity
+  ]
+}
+Published rows · 10
+ask 85583.20ask 85583.30ask 85583.40ask 85583.50ask 85583.70bid 85582.40bid 85582.50bid 85582.90bid 85583.00bid 85583.10
+ColumnValueFromRule
+received_time1791226529504069515—Our collector's clock when it received the REST response, in nanoseconds since the Unix epoch.
+event_time1791226529372ECopied. Milliseconds.
+transaction_time1791226529369TCopied. Milliseconds.
+symbolBTCUSDT—The symbol that the collector requested.
+event_typesnapshot—snapshot for every REST snapshot.
+first_update_idnull—Null for snapshots.
+final_update_id11742279126574lastUpdateIdCopied.
+prev_final_update_idnull—Null for snapshots.
+last_update_id11742279126574lastUpdateIdCopied. Replay from the first later update that has first_update_id ≤ this value ≤ final_update_id, or that has prev_final_update_id equal to this value.
+sideaskbidsasksbid for levels in bids, ask for levels in asks. One row per level.
+price85583.20bids[][0]asks[][0]Copied as the exact decimal string.
+quantity5.022bids[][1]asks[][1]Copied as the exact decimal string.
+order_countnull—Null. Binance does not send order counts.
+Notes
+We do not publish an update row if its final_update_id equals the lastUpdateId of a snapshot in the same hour. The snapshot already contains these updates.
+A depth update with no levels becomes one row with side noop, and with price and quantity 0. This row contains the update IDs and does not change the order book. An empty REST snapshot becomes one noop snapshot row. When you replay this row, clear the order book.
+REST snapshots usually contain 500 levels per side. When the collector resets many order books at the same time, the snapshots contain 100 levels per side. Levels outside a snapshot are unknown until an update changes them.
+Binance can send a removal (quantity 0) for a level that is not in the order book. The Binance documentation says that this is normal. Ignore the removal when you replay.
+A file can start with a checkpoint. A checkpoint is the order book that we replayed up to the hour boundary, as snapshot rows. These rows have received_time at the start of the hour and the event_time of the last exchange event before that time. Their transaction_time is null. Their final_update_id and last_update_id contain the last update ID that we applied. We write a checkpoint only after we make sure that the order book is current. If a file has no checkpoint, continue from the order book of the previous hour or wait for the next snapshot.
+For the column types and descriptions, refer to the Order Book schema.
+Ticker
+One row per entry of each !ticker@arr frame. Binance includes only the symbols whose statistics changed, at most once per second.
+WebSocket !ticker@arr
+Shortened: The all-market frame contained 185 tickers. This example shows only BTCUSDT. Each entry becomes its own row.
+WebSocket message · !ticker@arrreceived 2026-10-05 19:01:46.148563 UTC
+{
+  "stream": "!ticker@arr",
+  "data": [
+    {
+      "e": "24hrTicker",
+      "E": 1791226905514,→ event_time
+      "s": "BTCUSDT",→ symbol
+      "ps": "BTCUSDT",
+      "p": "283.20",→ price_change
+      "P": "0.332",→ price_change_percent
+      "w": "85961.44",→ weighted_average_price
+      "c": "85583.20",→ last_price
+      "Q": "0.033",→ last_quantity
+      "o": "85300.00",→ open_price
+      "h": "86976.10",→ high_price
+      "l": "84910.00",→ low_price
+      "v": "175409.143",→ base_asset_volume
+      "q": "15078422443.55",→ quote_asset_volume
+      "O": 1791140460000,→ statistics_open_time
+      "C": 1791226905514,→ statistics_close_time
+      "F": 8144678472,→ first_trade_id
+      "L": 8148200173,→ last_trade_id
+      "n": 3507274,→ total_trades
+      "st": 1
+    }
+  ]
+}
+Published row
+ColumnValueFromRule
+received_time1791226906148563000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226905514data[].ECopied. Milliseconds.
+symbolBTCUSDTdata[].sCopied.
+price_change283.20data[].pCopied.
+price_change_percent0.332data[].PCopied. Percent: 0.332 means +0.332 %.
+weighted_average_price85961.44data[].wCopied.
+last_price85583.20data[].cCopied.
+last_quantity0.033data[].QCopied.
+open_price85300.00data[].oCopied.
+high_price86976.10data[].hCopied.
+low_price84910.00data[].lCopied.
+base_asset_volume175409.143data[].vCopied. Base asset units.
+quote_asset_volume15078422443.55data[].qCopied. Quote asset units.
+statistics_open_time1791140460000data[].OCopied. Milliseconds.
+statistics_close_time1791226905514data[].CCopied. Milliseconds.
+first_trade_id8144678472data[].FCopied.
+last_trade_id8148200173data[].LCopied.
+total_trades3507274data[].nCopied.
+Notes
+A symbol with no change in its statistics gets no row for that second. Continue to use the last row for that symbol.
+We publish only the symbols that USDⓈ-M exchangeInfo lists. The all-market streams of Binance also contain COIN-M contracts (for example BTCUSD_PERP) and delisted symbols. We remove their rows. Before the 2026-09 data-integrity release, we published these rows.
+For the column types and descriptions, refer to the Ticker schema.
+Mark Price
+One row per symbol per !markPrice@arr@1s frame, about one per second.
+WebSocket !markPrice@arr@1s
+Shortened: The all-market frame contained 745 symbols. This example shows only BTCUSDT. Each entry becomes its own row.
+WebSocket message · !markPrice@arr@1sreceived 2026-10-05 19:01:42.216687 UTC
+{
+  "stream": "!markPrice@arr@1s",
+  "data": [
+    {
+      "e": "markPriceUpdate",
+      "E": 1791226902000,→ event_time
+      "s": "BTCUSDT",→ symbol
+      "p": "85583.30000000",→ mark_price
+      "ap": "85583.30000000",
+      "P": "85612.13024722",→ estimated_settle_price
+      "i": "85633.04043478",→ index_price
+      "r": "0.00000563",→ funding_rate
+      "T": 1791244800000,→ next_funding_time
+      "st": 1
+    }
+  ]
+}
+Published row
+ColumnValueFromRule
+received_time1791226902216687000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226902000data[].ECopied. Milliseconds.
+symbolBTCUSDTdata[].sCopied.
+mark_price85583.30000000data[].pCopied.
+index_price85633.04043478data[].iCopied.
+estimated_settle_price85612.13024722data[].PCopied. The Binance documentation says that this value is useful only in the last hour before settlement.
+funding_rate0.00000563data[].rCopied. A fraction per funding period: 0.00000563 is 0.000563 %.
+next_funding_time1791244800000data[].TCopied. Milliseconds.
+Notes
+We publish only the symbols that USDⓈ-M exchangeInfo lists. The all-market streams of Binance also contain COIN-M contracts (for example BTCUSD_PERP) and delisted symbols. We remove their rows. Before the 2026-09 data-integrity release, we published these rows.
+For the column types and descriptions, refer to the Mark Price schema.
+Open Interest
+One row per 5-minute open interest point from REST polls.
+REST GET /futures/data/openInterestHist
+The USDⓈ-M WebSocket streams of Binance do not include open interest. The collector polls the history of 5-minute open interest every 5 minutes. We publish each point one time, in the hour of the first poll that returned it.
+Shortened: We requested this example with limit=3 to keep it short. The collector requests limit=500.
+REST responsereceived 2026-10-05 18:55:29.795573 UTC
+GET https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=5m&limit=3
+[
+  {
+    "symbol": "BTCUSDT",→ symbol
+    "sumOpenInterest": "95006.41500000",→ sum_open_interest
+    "sumOpenInterestValue": "8130409421.87865450",→ sum_open_interest_value
+    "CMCCirculatingSupply": "20093487.00000000",
+    "timestamp": 1791225600000→ timestamp
+  },
+  {
+    "symbol": "BTCUSDT",→ symbol
+    "sumOpenInterest": "94973.61800000",→ sum_open_interest
+    "sumOpenInterestValue": "8127186910.47580000",→ sum_open_interest_value
+    "CMCCirculatingSupply": "20093487.00000000",
+    "timestamp": 1791225900000→ timestamp
+  },
+  {
+    "symbol": "BTCUSDT",→ symbol
+    "sumOpenInterest": "94930.31000000",→ sum_open_interest
+    "sumOpenInterestValue": "8122474649.37500000",→ sum_open_interest_value
+    "CMCCirculatingSupply": "20093487.00000000",
+    "timestamp": 1791226200000→ timestamp
+  }
+]
+Published rows · 3
+Row 1Row 2Row 3
+ColumnValueFromRule
+received_time1791226529795573655—Our collector's clock when it received the REST response, in nanoseconds since the Unix epoch. All points from one poll have the same value.
+symbolBTCUSDT[].symbolCopied.
+sum_open_interest95006.41500000[].sumOpenInterestCopied. Base asset units.
+sum_open_interest_value8130409421.87865450[].sumOpenInterestValueCopied. Notional value in the quote asset (USDT for BTCUSDT).
+timestamp1791225600000[].timestampCopied. Binance's time for the 5-minute point. Milliseconds.
+Notes
+Each poll returns up to 500 points (about 41 hours). After a pause in the polls, the file of the next hour contains the points that no earlier hour published. Thus, timestamp can be hours before received_time.
+For the column types and descriptions, refer to the Open Interest schema.
+Liquidations
+One row per forceOrder event on the !forceOrder@arr stream.
+WebSocket !forceOrder@arr
+WebSocket message · !forceOrder@arrreceived 2026-10-05 19:01:53.291380 UTC
+{
+  "stream": "!forceOrder@arr",
+  "data": {
+    "e": "forceOrder",
+    "E": 1791226913155,→ event_time
+    "o": {
+      "s": "RLCUSDT",→ symbol
+      "S": "BUY",→ side
+      "o": "LIMIT",→ order_type
+      "f": "IOC",→ time_in_force
+      "q": "809.3",→ quantity
+      "p": "0.7135",→ price
+      "ap": "0.7048",→ average_price
+      "X": "FILLED",→ order_status
+      "l": "0.8",→ last_filled_quantity
+      "z": "809.3",→ filled_quantity
+      "T": 1791226913110,→ trade_time
+      "ps": "RLCUSDT",
+      "st": 1
+    }
+  }
+}
+Published row
+ColumnValueFromRule
+received_time1791226913291380000—Our collector's clock when it received the message, in nanoseconds since the Unix epoch. Binance does not send this value.
+event_time1791226913155data.ECopied. Milliseconds.
+symbolRLCUSDTdata.o.sCopied.
+sideBUYdata.o.SCopied. BUY closes a liquidated short position. SELL closes a liquidated long position.
+order_typeLIMITdata.o.oCopied.
+time_in_forceIOCdata.o.fCopied.
+quantity809.3data.o.qCopied. The original order quantity, in base asset units.
+price0.7135data.o.pCopied. The limit price of the liquidation order.
+average_price0.7048data.o.apCopied. The average fill price.
+order_statusFILLEDdata.o.XCopied.
+last_filled_quantity0.8data.o.lCopied. The quantity of the last fill of the order.
+filled_quantity809.3data.o.zCopied. The accumulated filled quantity.
+trade_time1791226913110data.o.TCopied. Milliseconds.
+Notes
+Binance sends at most one liquidation per symbol per 1,000 ms. Thus, the rows are a sample and do not include every liquidation. Counts and totals are a lower bound.
+We publish only the symbols that USDⓈ-M exchangeInfo lists. The all-market streams of Binance also contain COIN-M contracts (for example BTCUSD_PERP) and delisted symbols. We remove their rows. Before the 2026-09 data-integrity release, we published these rows.
+For the column types and descriptions, refer to the Liquidations schema.Previous · Exchange Wire FormatsBinance SpotNext · Exchange Wire FormatsBybit Spot
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

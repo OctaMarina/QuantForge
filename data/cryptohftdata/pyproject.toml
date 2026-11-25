@@ -1,0 +1,30 @@
+[project]
+name = "chdds"
+version = "0.1.0"
+description = "Reproducible ML datasets (time/volume/dollar/CUSUM bars + causal features) from CryptoHFTData Binance USD-M BTCUSDT microstructure"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "pyarrow>=20",
+    "numba>=0.60",
+    "zstandard>=0.23",
+    "polars>=1.0",
+    "PyYAML>=6",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+chdds = "chdds.cli:run"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["chdds*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

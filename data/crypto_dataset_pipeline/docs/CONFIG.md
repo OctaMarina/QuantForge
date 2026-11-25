@@ -7,7 +7,8 @@ configurația efectivă. Valorile implicite sunt **puncte de plecare rezonabile,
 Identitatea unei serii de bare (`series_id`) depinde doar de: exchange, tip piață, simbol, tip bară, prag/interval,
 `bar_origin` (bare de evenimente), sursa de tranzacții, politica de goluri, zecimalele de reprezentare. Perioada de
 export și warm-up-ul **nu** intră în identitate, deci nu mută granițele. Hash-ul complet al configurației
-identifică build-ul (`data/datasets/<config_hash>/`).
+identifică build-ul; directorul de ieșire e lizibil: `data/datasets/<SYMBOL>_<market>_<bară>_<prag>_<start>-<end>_<hash8>/`
+(ex. `SOLUSDT_spot_volume_168000_20210901-20260901_1a2b3c4d`), sufixul fiind primele 8 caractere din hash.
 
 | Cheie | Implicit | De ce |
 |---|---|---|
@@ -40,6 +41,9 @@ identifică build-ul (`data/datasets/<config_hash>/`).
 | `features.flow.min_trades_regression / bar_windows` | 20 / [50] | λ pe tranzacțiile barei / rolling pe bare |
 | `features.structural.*` | W=200, τ=30, p=1, intercept, q=0.95, trim=0.15 | configurația testelor (declarată, neoptimizată); `eval_every` > 1 lasă null cu motivul `not_evaluated` |
 | `features.premium.*` | Coinbase; BTC, ETH (+ activul); FX USDT-USD; acoperire zilnică ≥ 0.9; z 90 (min 60) | |
+| `features.premium.context_assets` | [BTC, ETH] | active de context; coloanele sunt `premium_raw_coinbase_<asset>_*`, `premium_fx_coinbase_<asset>_1m` |
+| `features.premium.include_instrument_base` | true | adaugă activul construit (ex. SOL pentru SOLUSDT); `context_assets=[]` ⇒ doar activul propriu |
+| `features.premium.usd_products` | {} | produsul USD per activ dacă diferă de `<ASSET>-USD`, ex. `{POL: POL-USD}`; un produs indisponibil anulează doar coloanele acelui activ |
 | `features.etf.*` | z 60 sesiuni (min 40); vechime max 4 zile | |
 | `features.dvol.*` | BTC, ETH; rezoluție 60 s; vechime max 5 min | |
 | `features.skew.*` | 30 zile, delta 0.25, IV = mid(bid_iv, ask_iv), quote ≤ 60 s, snapshot ≤ 5 min | |
@@ -50,6 +54,8 @@ identifică build-ul (`data/datasets/<config_hash>/`).
 | `features.book.max_book_age / max_quote_age` | 2s / 2s | pentru un flux diff „nicio actualizare” poate însemna „fără schimbare”; măriți dacă sesiunea e liniștită |
 | `features.book.wall.*` | bin 10 USDT (BTC), ≤ 100 bps, prag = 5 × mediana binurilor de pe aceeași parte, eșantionare 10 s | definiție explicită a „concentrărilor”; alternativ `history_quantile` |
 | `storage.root` | ./data | toate nivelurile (raw / normalized / state / datasets / live) |
+| `storage.dataset_name` | auto | numele directorului din `datasets/`; `auto` = `<SYMBOL>_<market>_<bară>_<prag>[_<tag>]_<start>-<end>_<hash8>`; nu intră în hash |
+| `storage.dataset_tag` | null | etichetă opțională în nume, ex. `25pd` (bare/zi țintă); nu intră în hash |
 | `storage.max_download_gb` | 50 | dry-run-ul semnalează depășirea |
 | `storage.rate_limit_per_s` | per furnizor | limitarea cererilor |
 | `storage.request_timeout_s / retries / backoff_s` | 30 / 5 / 1.0 | retry exponențial pentru 429/5xx; refuzurile de politică (403/407) nu se reîncearcă |

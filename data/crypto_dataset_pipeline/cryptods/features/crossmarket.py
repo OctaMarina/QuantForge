@@ -12,6 +12,7 @@ import pandas as pd
 
 from .. import timeutil as tu
 from ..asof import asof_values
+from ..config import premium_assets, premium_usd_product
 from ..nulls import Col, CODE, VALID
 from ..registry import FeatureSpec
 from .context import Ctx
@@ -54,17 +55,18 @@ def compute(ctx: Ctx):
     pc = cfg["premium"]
     venue = pc["usd_venue"]
     lat_d = tu.parse_duration(pc["daily_finalization_delay"])
-    assets = list(dict.fromkeys(list(pc["context_assets"]) + [ctx.spec.base]))
-    for asset in assets:
+    reasons = T.get("premium_missing_reason") or {}
+    for asset in premium_assets(ctx.cfg):
         usd = (T.get("usd_1m") or {}).get(asset)
         usdt = (T.get("usdt_1m") or {}).get(asset)
         fx = T.get("fx_1m")
         lab = f"{venue}_{asset.lower()}"
-        base_kw = dict(family="premium", clock="1-minute candles", provider=f"{venue} {asset}-USD vs binance {asset}USDT",
+        product = premium_usd_product(ctx.cfg, asset)
+        base_kw = dict(family="premium", clock="1-minute candles", provider=f"{venue} {product} vs binance {asset}USDT",
                        inputs="closed 1m candles (close vs close, identical minute)",
                        availability="minute end (market-time replay)", nature="observed",
                        null_reasons=["missing_source_data", "stale_input", "source_unreachable"])
-        reason = T.get("premium_missing_reason", "missing_source_data")
+        reason = reasons.get(asset, "missing_source_data") if isinstance(reasons, dict) else reasons
         if usd is None or usdt is None or len(usd) == 0 or len(usdt) == 0:
             for nm in (f"premium_raw_{lab}_1m", f"premium_fx_{lab}_1m", f"premium_raw_{lab}_1d",
                        f"premium_raw_{lab}_1d_z{pc['z_window_days']}", f"premium_raw_{lab}_1d_coverage"):
@@ -76,7 +78,7 @@ def compute(ctx: Ctx):
         m["premium_raw"] = np.log(m["a"] / m["b"])
         m["available_at_us"] = m["period_end_us"]
         _asof_add(ctx, f"premium_raw_{lab}_1m", m, "premium_raw", "2min",
-                  dict(formula=f"log(P_USD/P_USDT), {venue} {asset}-USD close vs Binance {asset}USDT close, same closed minute",
+                  dict(formula=f"log(P_USD/P_USDT), {venue} {product} close vs Binance {asset}USDT close, same closed minute",
                        unit="log ratio", **base_kw))
         if fx is not None and len(fx):
             mf = m.merge(fx[["period_start_us", "close"]].rename(columns={"close": "fx"}), on="period_start_us", how="inner")

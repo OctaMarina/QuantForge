@@ -1,0 +1,4 @@
+requests>=2.31,<3
+python-dotenv[cli]>=1,<2
+pyarrow>=16
+zstandard>=0.22,<1

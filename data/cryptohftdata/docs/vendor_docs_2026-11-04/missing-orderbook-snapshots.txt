@@ -1,0 +1,170 @@
+No snapshot in your order book file? Replay the updates and build your own - CryptoHFTData Blog
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Home
+/
+Blog
+/
+No snapshot in your order book file? Replay the updates and build your own
+No snapshot in your order book file? Replay the updates and build your own
+Every update row carries the new size at a price, so a book replayed from an empty dict is exact wherever it has seen a change. We measured how quickly it matches real snapshots on Binance Futures and Bybit, with code you can run.
+By CryptoHFTData Team
+September 11, 2026
+12 min read
+#tutorial#python#orderbook#binance#bybit
+TL;DR
+Some hourly order book files contain only update rows and no snapshot. You can still rebuild the book.
+Each update is the new total size at a price, not a change. Replaying updates into an empty dict gives you a book where every level you hold is exactly right.
+The only thing such a book lacks is levels that have not changed since you started. Near the mid those are gone in seconds. Deep, dormant levels can take an hour or never show up.
+Measured against real snapshots: BTCUSDT and ETHUSDT on Binance Futures were identical down to 500 levels per side within 10 seconds. Bybit BTCUSDT matched all 50 levels within 30 seconds.
+A ready-to-run script is below, and we are backfilling hour-boundary snapshots into the historical files.
+The problem
+You download an hour of BTCUSDT order book data and look at the event types:
+pip install --upgrade cryptohftdata pyarrow pandas
+cryptohftdata download --file binance_futures/2026-09-11/15/BTCUSDT_orderbook.parquet --output binance-15.parquet
+import pandas as pd
+df = pd.read_parquet("binance-15.parquet")
+print(df["event_type"].value_counts())
+update    9250374
+Nine million updates and not a single snapshot. Historically, our collectors wrote a snapshot when they connected or reconnected to an exchange, not at every hour boundary. An hour is just a storage partition. So plenty of hours, especially before September 2026, start mid-stream.
+The good news is that you do not need the snapshot to get a usable book. Here is why.
+Why an update is enough
+An L2 order book is a list of price levels with the total quantity resting at each. Exchanges publish changes to it as deltas, and the key fact about those deltas is:
+An update does not say "add 2 BTC at this price". It says "this price now has 2 BTC".
+Think of each update as a sticky note that replaces whatever was on that price before. You do not need to know what was there. As soon as you have seen one update for a price, you know its exact current size.
+ | side | price | quantity | Meaning
+ | bid | 77650.10 | 3.2 | The bid at 77,650.10 now holds 3.2 BTC
+ | bid | 77650.10 | 2.0 | It now holds 2.0 BTC (not 5.2)
+ | bid | 77650.10 | 0 | The level is gone
+So a book replayed from an empty dict has a simple, useful property:
+Every level it holds is exactly right. Price and size match the exchange.
+It never holds a level that does not exist. Deletions arrive as quantity = 0.
+It only lacks levels that nobody has touched since you started replaying.
+A level that has not changed in ten minutes is, by definition, a quiet one. Near the touch nothing stays quiet for long: on Binance Futures BTCUSDT, more than 6,000 distinct price levels change in the first ten seconds of any replay. The question is how far from the mid you can trust the replayed book after a given warm-up. We measured exactly that below.
+Build the book in 20 lines
+The complete replay logic fits in a small class. Use Decimal so prices are exact dictionary keys, and sort numerically rather than as strings.
+from decimal import Decimal
+class Book:
+    def __init__(self):
+        self.levels = {"bid": {}, "ask": {}}
+        self.last_event = None
+    def apply(self, row):
+        if row.event_type == "snapshot" and self.last_event != "snapshot":
+            self.levels = {"bid": {}, "ask": {}}   # a snapshot replaces the whole book
+        self.last_event = row.event_type
+        if row.side == "noop":                     # sequence marker, not a price level
+            return
+        price, size = Decimal(row.price), Decimal(row.quantity)
+        if size == 0:
+            self.levels[row.side].pop(price, None) # deleting an unseen level is harmless
+        else:
+            self.levels[row.side][price] = size    # the NEW size, not a delta
+    def top(self, side, n=5):
+        return sorted(self.levels[side].items(), reverse=(side == "bid"))[:n]
+Feed it the rows of the DataFrame in file order and you have a book:
+book = Book()
+for row in df.itertuples():
+    book.apply(row)
+print("best 5 bids:", book.top("bid"))
+print("best 5 asks:", book.top("ask"))
+Two details matter when you read the book during the replay rather than at the end:
+One exchange message can span several rows. Read the book only after the last row of a message, otherwise you can see a half-applied state that never existed on the exchange. Consecutive rows with identical timestamp and ID columns belong to the same message. The downloadable script groups them for you.
+Never re-sort the rows. The files are in replay order. Sorting by timestamp can split messages and break the sequence.
+Get the data
+There are two ways to get order book files. The Python SDK returns whole days as one DataFrame, already in replay order:
+import cryptohftdata as chd
+# Optional: an API key removes the free-tier rate limit.
+# chd.configure_client(api_key="your_api_key")
+df = chd.get_orderbook(
+    symbol="BTCUSDT",
+    exchange=chd.exchanges.BINANCE_FUTURES,   # or chd.exchanges.BYBIT_FUTURES
+    start_date="2026-09-11",
+    end_date="2026-09-11",
+)
+A day of BTCUSDT is well over 100 million rows, so for a replay across specific hours it is lighter to fetch the hourly Parquet files with the CLI that ships with the package:
+cryptohftdata download --file binance_futures/2026-09-11/15/BTCUSDT_orderbook.parquet --output binance-15.parquet
+cryptohftdata download --file binance_futures/2026-09-11/16/BTCUSDT_orderbook.parquet --output binance-16.parquet
+cryptohftdata download --file bybit/2026-09-11/15/BTCUSDT_orderbook.parquet --output bybit-15.parquet
+cryptohftdata download --file bybit/2026-09-11/16/BTCUSDT_orderbook.parquet --output bybit-16.parquet
+Consecutive hourly files chain together. The last update of hour 15 links to the first update of hour 16, so you can replay straight across the boundary. The Bybit perpetuals archive prefix is bybit. Files from before August 19, 2026 may be wrapped in an outer Zstandard layer; decompress that first if you read them with PyArrow directly.
+How good is a replayed book? We measured it
+Saying "the top of the book converges fast" is easy. We wanted numbers, so we went looking for hours in our archive that do contain a genuine snapshot and used them as ground truth.
+The experiment is simple:
+Start a reference book from the real snapshot.
+Start a replayed book completely empty at the same instant.
+Feed both books exactly the same update messages.
+At 10 s, 30 s, 1, 2, 5, 10, 15, 20, 30, 45, 60 and 90 minutes, compare them level by level.
+Because both books see identical deltas, any difference is a level the replayed book has never seen change. Where a later snapshot existed at the same sequence cursor, we also checked the reference against it. It matched exactly every time, so the reference really is ground truth.
+Across all ten runs, 1.28 million update messages were applied. The replayed book never held a wrong size and never held a level that was not in the reference. Not once. The only differences were missing levels, and here is how long they took to fill in:
+ | Market | What the real snapshot covered | Top 5 exact | Top 50 exact | Everything within 0.5% of mid | Whole snapshot exact
+ | Binance Futures BTCUSDT | 500 levels per side (about ±0.1%) | ≤ 10 s | ≤ 10 s | ≤ 10 s | ≤ 10 s
+ | Binance Futures ETHUSDT | 500 levels per side (about ±0.2%) | ≤ 10 s | ≤ 10 s | ≤ 10 s | ≤ 10 s
+ | Binance Futures XRPUSDT | 500 levels per side (about ±3.6%) | ≤ 10 s | ≤ 10 s | ≤ 10 s | 5 min
+ | Binance Futures DOGEUSDT | 500 levels per side (about ±5.9%) | ≤ 10 s | ≤ 10 s | ≤ 10 s | 60 min
+ | Binance Futures SOLUSDT | Full book, 3,747 levels | ≤ 10 s | ≤ 10 s | ≤ 10 s | Not in 55 min: 34% unseen, all > 3.6% away
+ | Binance Futures IOTAUSDT | Full book, 876 levels | ≤ 10 s | 5 min | 30 s | Not in 60 min: 43% unseen, all > 4.4% away
+ | Bybit BTCUSDT (two runs) | 50 levels per side | ≤ 10 s | 30 s | 30 s | 30 s
+ | Bybit SOLUSDT | 50 levels per side | ≤ 10 s | ≤ 10 s | ≤ 10 s | One level 1.3% away never changed
+ | Bybit IOTAUSDT | 50 levels per side | 30 s | 30 min | 5 min | 30 min
+"≤ 10 s" means the books were already identical at the first checkpoint. Three patterns stand out:
+The top of the book converges in seconds, everywhere. Even IOTAUSDT, a quiet market, had an exact top 5 after 30 seconds. On the majors the top 50 levels were exact before the first checkpoint.
+The active band converges within minutes. Everything within half a percent of the mid was exact within 30 seconds on every market except Bybit IOTAUSDT, which needed 5 minutes.
+Dormant depth may never converge. SOLUSDT still lacked a third of its levels after 55 minutes, but every one of them sat more than 3.6% from the mid. Those are resting orders nobody has touched in an hour. A replay cannot see a level that never changes, no matter how long you wait.
+The Binance REST snapshots only cover 500 levels per side, which for BTCUSDT is a band of about 0.1% around the mid. That is why the BTC and ETH rows say nothing about deeper levels. The SOLUSDT and IOTAUSDT rows come from our hour-boundary snapshots, which hold the collector's full book, so they show the deep-book behaviour honestly.
+Rules of thumb
+ | If you need… | Then…
+ | Best bid and ask, spread, microprice, top 5 or 10 levels | Replay from empty. Discard the first minute and you are covered on every market we tested.
+ | Top 50 levels, or all liquidity within 0.5% of the mid | Replay from empty with a 5 minute warm-up on liquid markets. Quiet alts may need up to 30 minutes.
+ | Full depth several percent away from the mid | Use a real snapshot. Dormant levels are invisible to a replay, and no warm-up length changes that.
+ | Exact reproducibility of the whole book at a timestamp | Use a real snapshot and verify the sequence chain. Ask support if the hour you need has none.
+Two habits make this safe in practice. Always start your replay a few minutes before the period you analyse and throw the warm-up away. And check the sequence IDs as you go, so a gap in the data cannot silently corrupt the book.
+Run the experiment yourself
+Download the script and point it at consecutive hourly files. It streams the Parquet files, groups rows into messages, checks the sequence chain, and prints a comparison at every checkpoint. If the files contain a snapshot, that snapshot becomes the reference. If they do not, it still replays from empty and reports how many levels the book holds.
+python orderbook_warmup.py binance_futures binance-15.parquet binance-16.parquet
+python orderbook_warmup.py bybit bybit-15.parquet bybit-16.parquet --json bybit.json
+To reproduce the BTCUSDT row of the table above, download binance_futures/2026-09-10/12/BTCUSDT_orderbook.parquet and the hour 13 file and run the script on both. The snapshot at 12:30:50 UTC anchors the run. The output looks like this:
+ 10s | levels ref=6,277 replayed=6,277 missing=0 extra=0 wrong_size=0 | top1=ok top5=ok top10=ok top20=ok top50=ok | nearest missing level: none
+ 30s | levels ref=9,131 replayed=9,131 missing=0 extra=0 wrong_size=0 | top1=ok top5=ok top10=ok top20=ok top50=ok | nearest missing level: none
+The heart of the script is the same Book class as above, plus a check that every update chains to the previous one.
+Exchange details that bite
+Binance Futures. Every update carries first_update_id (U), final_update_id (u) and prev_final_update_id (pu). After the first message, each update's pu must equal the previous update's u. If it does not, you have a gap. To bridge from a REST snapshot, accept the first update whose U ≤ lastUpdateId ≤ u and drop older ones. Snapshots in our files can be written in two halves with different received_time values, so identify a snapshot by its event_time and last_update_id, not by receive time.
+Bybit. final_update_id holds the per-feed u and last_update_id holds the cross-feed seq. seq must increase but is allowed to jump, so seq + 1 is not a gap test. A message with u = 1 is a reset: the exchange is telling you to rebuild. The public feed we archive is 50 levels deep, which is why Bybit books converge completely within seconds on liquid markets.
+Both. Our normalised rows also contain occasional side = "noop" markers that carry sequence information but no price level. Skip them; do not insert a price-zero level.
+For production systems follow the exchanges' own guides: Binance's local order book procedure and Bybit's order book stream documentation.
+What we are doing about it
+Our collectors now write a snapshot at the start of an hourly file whenever they hold a verified, sequence-continuous book at the hour boundary. We are also backfilling these hour-boundary snapshots into the historical files, exchange by exchange, by replaying each symbol's history from its last genuine snapshot and checking the chain the whole way. This work is not complete, and some intervals with genuine gaps cannot be repaired, so an hour without a snapshot will remain a reality for a while.
+Until then, the replay above is not a workaround. It is the same thing our own pipeline does after a snapshot, and for the top of the book it is exact within seconds. If you need full depth for an hour that has no anchor, or you find a broken sequence chain, contact support with the exchange, symbol and UTC hour, and we will look at it.
+Explore the data behind this post
+L2 Order Book Dataset
+Historical Crypto Order Book Data
+Binance Order Book Dataset
+Binance Historical Order Book Data
+Bybit Order Book Dataset
+Bybit Historical Order Book Data
+Browse the full dataset catalog or see how CryptoHFTData compares to other providers.
+Ready to access the data?
+Join thousands of traders and researchers building on CryptoHFTData.
+Back to BlogGet API Key
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals
