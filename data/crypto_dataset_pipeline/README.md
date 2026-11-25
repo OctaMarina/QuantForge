@@ -53,7 +53,7 @@ Toate cheile și motivarea valorilor implicite: [`docs/CONFIG.md`](docs/CONFIG.m
 
 1. `dry-run` înainte de o descărcare mare: listează zilele disponibile în arhiva Binance (listare S3), dimensiunea
    comprimată, zilele lipsă, accesul la fiecare furnizor și ce poate livra fiecare familie.
-2. `download` → `build`. Rezultatul: `data/datasets/<config_hash>/{time,volume,notional}.parquet` + manifest,
+2. `download` → `build`. Rezultatul: `data/datasets/<SYMBOL>_<market>_<bară>_<prag>_<start>-<end>_<hash8>/{time,volume,notional}.parquet` + manifest,
    registre, calitate, acoperire ([`docs/SCHEMA.md`](docs/SCHEMA.md)).
 3. `live` în paralel, permanent: este singura cale gratuită pentru L2, lichidări, skew 25Δ și pentru dovada
    point-in-time a publicărilor (ETF, Fear & Greed). `replay-live` reconstruiește din loguri.

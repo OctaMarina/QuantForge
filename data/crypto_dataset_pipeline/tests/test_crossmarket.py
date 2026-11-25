@@ -42,6 +42,26 @@ def test_premium_raw_and_fx_manual(spec, tmp_path):
     assert raw.values[0] != pytest.approx(adj.values[0])   # raw premium is NOT FX-adjusted
 
 
+def test_premium_for_instrument_base_and_per_asset_reason(tmp_path):
+    """A SOLUSDT build gets SOL premium columns next to the BTC/ETH context; an asset whose USD product
+    failed is nulled with its own reason without touching the others."""
+    from cryptods.instruments import InstrumentSpec
+    sol = InstrumentSpec("binance", "spot", "SOLUSDT", "SOL", "USDT", price_decimals=2, qty_decimals=3)
+    t0 = 10 * D
+    usd, usdt = candles(t0, 10, 150.3), candles(t0, 10, 150.0)
+    tables = {"usd_1m": {"BTC": usd, "ETH": None, "SOL": usd}, "usdt_1m": {"BTC": usdt, "ETH": usdt, "SOL": usdt},
+              "premium_missing_reason": {"ETH": "source_unreachable"}}
+    dec = [t0 + 5 * M + 30_000_000]
+    t = mk_trades(sol, [1], dec, ["150"], ["10"])
+    bars, _ = build_bars(sol, t, tmp_path, "volume", thr=1.0)
+    cfg = make_cfg(instrument={"base": "SOL", "quote": "USDT"})
+    ctx = ctx_for(cfg, sol, bars, tables=tables)
+    crossmarket.compute(ctx)
+    assert ctx.out["premium_raw_coinbase_sol_1m"].values[0] == pytest.approx(np.log(150.3 / 150.0))
+    assert "premium_raw_coinbase_btc_1m" in ctx.out
+    assert ctx.out["premium_raw_coinbase_eth_1m"].reason[0] == CODE["source_unreachable"]
+
+
 def test_intrabar_ohlc_not_visible(spec, tmp_path):
     """Decision at 12:00:30 sees the minute [11:59, 12:00) (available 12:00), never [12:00, 12:01)."""
     t0 = 10 * D + 12 * 3600 * 1_000_000

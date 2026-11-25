@@ -1,0 +1,41 @@
+# Configurație demonstrativă BTC (Binance spot BTCUSDT). Valorile sunt puncte de plecare rezonabile,
+# NU valori optimizate. Orice cheie lipsă ia valoarea implicită din cryptods/config.py (DEFAULTS).
+# Modificare din linia de comandă:  --set period.start=2024-03-01T00:00:00Z --set bars.types=[volume]
+instrument:
+  exchange: binance
+  market_type: spot          # spot | perpetual (USD-M, liniar)
+  base: BTC
+  quote: USDT                # notionalul barelor e în USDT (NU în USD)
+period:
+  start: "2024-06-01T00:00:00Z"     # inclusiv, UTC
+  end:   "2024-06-08T00:00:00Z"     # exclusiv, UTC
+  # Barele de volum/notional se acumulează începând cu bar_origin; granițele depind doar de
+  # (origin, prag, date). Schimbarea perioadei de export NU le mută.
+  bar_origin: "2024-05-25T00:00:00Z"
+warmup:
+  intraday_days: 31          # randamente 30d / RV 7d au nevoie de istoric anterior perioadei
+  daily_days: 200            # z-score 90 zile + trend 30 zile + marjă
+bars:
+  types: [time, volume, notional]
+  trade_source: trades       # execuții individuale (aggTrades doar ca alternativă declarată)
+  time: {interval: 5min}     # ~288 bare/zi
+  volume: {threshold: "100"} # 100 BTC/bară: ordinul de mărime ~ câteva sute de bare/zi în 2024
+  notional: {threshold: "10000000", currency: quote}   # 10M USDT/bară (quote notional)
+  adaptive: {enabled: false, lookback_days: 30, target_bars_per_day: 300}
+  gap_policy: invalidate_and_restart_segment
+timing:
+  replay_mode: market_time   # nivel 1 de dovadă: timpi/secvențe de exchange, fără latență live măsurată
+  bar_finalization_delay: 0ms
+  decision_latency: 0ms
+  cross_stream_tie: exclude_equal
+  strictness: strict         # strict: fără dovadă point-in-time -> null
+features:
+  structural: {window_bars: 200, min_length: 30, adf_lags: 1, quantile_q: 0.95, sdfc_trim: 0.15}
+  book:
+    bands_bps: [10, 25, 50]
+    sizes_base: ["0.1", "1", "10"]               # BTC
+    sizes_quote: ["10000", "100000", "1000000"]  # USDT notional de referință
+    taker_fee_bps: null                          # fără ipoteză de comision -> costul total rămâne null
+storage:
+  root: ./data
+  max_download_gb: 50

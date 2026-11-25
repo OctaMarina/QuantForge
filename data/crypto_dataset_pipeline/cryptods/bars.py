@@ -65,6 +65,9 @@ OUT_FLT = ["kyle_tick_sxx", "kyle_tick_sxy", "kyle_tick_syy", "kyle_aggr_sxx", "
            "hasb_tick_sxx", "hasb_tick_sxy", "hasb_tick_syy", "hasb_aggr_sxx", "hasb_aggr_sxy", "hasb_aggr_syy",
            "hasb_tick_xb", "hasb_aggr_xb"]
 NOI, NOF = len(OUT_INT), len(OUT_FLT)
+# per-bar sums that can never be negative; a negative value means the int64 accumulator wrapped
+_NONNEG = [OUT_INT.index(c) for c in OUT_INT if c.endswith(("volume_i", "notional_i"))]
+_VOL, _NOTL, _LOW, _HIGH = (OUT_INT.index(c) for c in ("volume_i", "notional_i", "low_i", "high_i"))
 
 
 @njit(cache=True)
@@ -300,6 +303,30 @@ def process_kernel(ts, tid, seq_first, seq_last, px, qty, notl, aggr, nexec,
     return row
 
 
+class ScaleOverflow(OverflowError):
+    """Per-bar int64 sums overflowed at the instrument scale (price_decimals + qty_decimals too large)."""
+
+
+def check_int64_sums(oi: np.ndarray, spec) -> None:
+    """The numba kernel accumulates in int64 without overflow traps; verify every emitted bar instead:
+    sums must be non-negative and notional / volume must lie within the bar's [low, high]."""
+    if not len(oi):
+        return
+    bad = (oi[:, _NONNEG] < 0).any(axis=1)
+    v = oi[:, _VOL] > 0
+    if v.any():
+        notl = oi[v, _NOTL] / float(spec.notional_scale)
+        vol = oi[v, _VOL] / float(spec.qty_scale)
+        lo, hi = oi[v, _LOW] / float(spec.price_scale), oi[v, _HIGH] / float(spec.price_scale)
+        tol = 1e-9 * np.abs(notl) + 1.0 / spec.notional_scale
+        bad[np.flatnonzero(v)] |= (notl < lo * vol - tol) | (notl > hi * vol + tol)
+    if bad.any():
+        raise ScaleOverflow(
+            f"{int(bad.sum())} bar(s) with inconsistent int64 volume/notional sums for {spec.symbol}: the scale "
+            f"10^{spec.price_decimals + spec.qty_decimals} is too large for the per-bar notional; lower "
+            f"instrument.qty_decimals (e.g. price_decimals + qty_decimals <= 10)")
+
+
 class GapPolicyHalt(RuntimeError):
     pass
 
@@ -419,6 +446,7 @@ class BarBuilder:
                            float(self.spec.notional_scale), int(watermark), self.st, self.sf, oi, of)
         if self.st[S_NREG] > self.max_ts_regressions:
             raise ValueError(f"{self.st[S_NREG]} exchange-timestamp regressions in id order exceed tolerance")
+        check_int64_sums(oi[:k], self.spec)
         return oi[:k], of[:k]
 
     @staticmethod

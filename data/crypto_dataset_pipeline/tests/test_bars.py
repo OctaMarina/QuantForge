@@ -208,3 +208,17 @@ def test_adaptive_threshold_uses_only_prior_complete_days(spec, tmp_path):
     out2 = vb(spec, tmp_path / "b", 1.0, adaptive=ad).process(t2)
     early = out[out.bar_end_us < 3 * D]
     pd.testing.assert_frame_equal(early.drop(columns="series_id"), out2.iloc[:len(early)].drop(columns="series_id"))
+
+
+def test_int64_overflow_of_bar_sums_is_detected(tmp_path):
+    """SOL-like scale 10^(4+8): a 168k-unit bar at ~150 USDT wraps the int64 notional; it must fail loudly."""
+    from cryptods.bars import BarBuilder, ScaleOverflow
+    from cryptods.instruments import InstrumentSpec
+    big = InstrumentSpec("binance", "spot", "SOLUSDT", "SOL", "USDT", price_decimals=4, qty_decimals=8)
+    t = mk_trades(big, range(1, 4), [1, 2, 3], ["150", "150", "150"], ["60000", "60000", "60000"])
+    with pytest.raises(ScaleOverflow):
+        BarBuilder("x", "volume", big, tmp_path / "a", threshold_i=168_000 * big.qty_scale).process(t)
+    ok = InstrumentSpec("binance", "spot", "SOLUSDT", "SOL", "USDT", price_decimals=4, qty_decimals=6)
+    t = mk_trades(ok, range(1, 4), [1, 2, 3], ["150", "150", "150"], ["60000", "60000", "60000"])
+    out = BarBuilder("x", "volume", ok, tmp_path / "b", threshold_i=168_000 * ok.qty_scale).process(t)
+    assert out["notional_i"].iloc[0] == 150 * 180_000 * ok.notional_scale

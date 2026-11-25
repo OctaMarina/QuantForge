@@ -17,7 +17,7 @@ END="2026-09-01T00:00:00Z"
 
 COMMON_ARGS=(
     --config "$CONFIG"
-    --set "instrument.symbol=ETHUSDT"
+    --set "instrument.base=ETH"          # symbol derivat: ETHUSDT (base decide premium, DVOL-vs-RV, unități)
     --set "instrument.market_type=spot"
     --set "period.start=$START"
     --set "period.end=$END"

@@ -1,0 +1,35 @@
+# Small REAL sample: Binance ETHUSDT spot trades 2020-08-14 10:00-15:00 UTC (69,806 rows incl. 70
+# exact duplicate rows) from nautilus_trader test_data (scripts/fetch_real_fixtures.sh).
+# Thresholds/windows are scaled down to the 5-hour sample; they are illustrative, not optimised.
+instrument: {exchange: binance, market_type: spot, base: ETH, quote: USDT, symbol: ETHUSDT}
+period:
+  start: "2020-08-14T10:00:00Z"
+  end: "2020-08-14T15:00:00Z"
+  bar_origin: "2020-08-14T10:00:00Z"
+warmup: {intraday_days: 0, daily_days: 0}
+bars:
+  # information-driven bars with the recommended rules (docs/INFORMATION_BARS.md): runs bars with a fixed
+  # E0[T] = 1000 ticks, imbalance bars with the RMS window threshold at H = 1000 ticks.  1 h of trades
+  # (~14 000) is the EWMA memory and the warm-up of the RMS rule on this 5-hour sample.
+  types: [time, volume, notional, tick_runs, volume_runs, notional_runs, tick_imbalance, volume_imbalance,
+          notional_imbalance]
+  information:
+    sign: aggressor
+    imbalance_threshold: rms
+    per_type:
+      tick_runs: {fixed_expected_ticks: 1000, warmup_ticks: 1000, ewma_span_bars: 20}
+      volume_runs: {fixed_expected_ticks: 1000, warmup_ticks: 1000, ewma_span_bars: 20}
+      notional_runs: {fixed_expected_ticks: 1000, warmup_ticks: 1000, ewma_span_bars: 20}
+      tick_imbalance: {rms_horizon_ticks: 1000, warmup_ticks: 14000, ewma_span_ticks: 14000}
+      volume_imbalance: {rms_horizon_ticks: 1000, warmup_ticks: 14000, ewma_span_ticks: 14000}
+      notional_imbalance: {rms_horizon_ticks: 1000, warmup_ticks: 14000, ewma_span_ticks: 14000}
+  time: {interval: 5min}
+  volume: {threshold: "2000"}          # ETH
+  notional: {threshold: "1000000"}     # USDT
+features:
+  returns: {calendar_horizons: [5min, 1h, 4h, 1d], bar_horizons: [1, 5, 20]}
+  realized_vol: {grid: 1min, windows: [1h], bar_windows: [20]}
+  flow: {min_trades_regression: 20, bar_windows: [20]}
+  structural: {window_bars: 40, min_length: 15, csw_window: 40, bde_window: 40}
+  skew: {currency: ETH}
+storage: {root: ./sample_output/data}

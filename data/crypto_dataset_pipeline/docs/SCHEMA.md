@@ -8,9 +8,9 @@
 | 1. live | `live/<flux>/<zi>/<HHMM>.jsonl.gz` | fiecare mesaj WebSocket / poll cu `received_at_us`; `live/_conn` = deschideri/închideri de conexiune (acoperire) |
 | 2. normalizat | `normalized/px1s/…`, `normalized/trades_quality/…`, `normalized/coinbase/…`, `normalized/deribit/…`, opțional `normalized/trades/…` | tabele reconstruite (prețul previous-tick pe secundă, calitatea fiecărui fișier zilnic, serii externe) |
 | 2. stare | `state/<series_id>/state.json`, `state/<series_id>/bars/part-*.parquet` | starea builderului (inclusiv bara deschisă, sumele float în hex exact), barele închise |
-| 3. final | `datasets/<config_hash>/` | dataseturi per tip de bară + manifest + registre + calitate + acoperire |
+| 3. final | `datasets/<dataset_name>/` | dataseturi per tip de bară + manifest + registre + calitate + acoperire; `<dataset_name>` = `<SYMBOL>_<market>_<bară>_<prag>_<start>-<end>_<hash8>` (`storage.dataset_name`) |
 
-## Fișiere în `datasets/<config_hash>/`
+## Fișiere în `datasets/<dataset_name>/`
 
 | Fișier | Descriere |
 |---|---|

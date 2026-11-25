@@ -173,3 +173,29 @@ def test_config_hash_ignores_storage_paths():
     b = cfgmod.load(str(SAMPLE), ["storage.root=/y", "storage.retries=1"])
     c = cfgmod.load(str(SAMPLE), ["bars.volume.threshold=1999"])
     assert cfgmod.config_hash(a) == cfgmod.config_hash(b) != cfgmod.config_hash(c)
+
+
+def test_symbol_must_match_base_quote():
+    """symbol=BNBUSDT with the default base BTC would compute BTC premia for a BNB dataset."""
+    with pytest.raises(ValueError, match="does not match"):
+        cfgmod.load(None, ["instrument.symbol=BNBUSDT"])
+    c = cfgmod.load(None, ["instrument.base=sol"])
+    assert c["instrument"]["symbol"] == "SOLUSDT"
+    assert cfgmod.premium_assets(c) == ["BTC", "ETH", "SOL"]
+    c2 = cfgmod.load(None, ["instrument.base=SOL", "features.premium.context_assets=[]"])
+    assert cfgmod.premium_assets(c2) == ["SOL"]
+
+
+def test_dataset_name_is_readable_and_hash_suffixed():
+    c = cfgmod.load(None, ["instrument.base=SOL", "bars.types=[volume]", "bars.volume.threshold=168000",
+                           "period.start=2021-09-01T00:00:00Z", "period.end=2026-09-01T00:00:00Z",
+                           "period.bar_origin=2021-09-01T00:00:00Z"])
+    name = cfgmod.dataset_name(c)
+    assert name == f"SOLUSDT_spot_volume_168000_20210901-20260901_{cfgmod.config_hash(c)[:8]}"
+    # the directory name itself is not part of the content hash
+    tagged = cfgmod.load(None, ["instrument.base=SOL", "bars.types=[volume]", "bars.volume.threshold=168000",
+                                "storage.dataset_tag=25pd"])
+    assert "_168000_25pd_" in cfgmod.dataset_name(tagged)
+    c2 = cfgmod.load(None, ["storage.dataset_name=my_sol"])
+    assert cfgmod.dataset_name(c2) == "my_sol"
+    assert cfgmod.config_hash(c2) == cfgmod.config_hash(cfgmod.load(None, []))
