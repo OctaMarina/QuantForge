@@ -1,0 +1,15 @@
+# Representative intervals for an end-to-end check before the extended run:
+#  2026-04-22..25 : mark/ticker 24 h outage (04-23 17:00 -> 04-24 17:00), liquidations 23 h outage
+#  (the bar engines need contiguous days; run once per interval with --start/--end overrides)
+dataset:
+  name: bench_incidents
+  start: 2026-04-22
+  end: 2026-04-25
+bars:
+  - {name: time_1m, kind: time, threshold: 60}
+  - {name: volume_50btc, kind: volume, threshold: 50}
+  - {name: dollar_5musdt, kind: dollar, threshold: 5000000}
+  - {name: cusum_5bps, kind: cusum, threshold: 5}
+features:
+  families: [bar, trades, mark, oi, liq, ticker, calendar, book, combos]
+workers: 4

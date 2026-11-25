@@ -1,0 +1,191 @@
+Python SDK Mark Price | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKMark Price
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Mark Price Data
+Download Mark Price History
+Download mark price data for futures contracts. Exchanges use the mark price to calculate liquidations.
+SDKclient.get_mark_price()
+Python SDK Example
+Python
+Copy
+1# Get mark price data (futures exchanges only)
+2df = client.get_mark_price(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_FUTURES,  # Note: futures exchange
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes: timestamp, mark_price
+10print(df.head())
+11
+Important Note
+Usually, mark price data is available only for futures exchanges, for example binance-futures, bybit-futures and other futures exchanges.
+Data Format - CommonMarkPrice
+We keep mark price data in the CommonMarkPrice structure. This structure contains mark price information, the related funding data, and settlement estimates:
+Schema Overview
+Each mark price event contains time data, symbol data, and a full set of price information. This information includes the mark price, index price, estimated settlement price, and funding rate details.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the mark price event
+ | event_time | INT64 | No | Unix timestamp when the exchange generated the event (the time unit changes with the exchange)
+ | symbol | STRING | No | Trading pair symbol (for example, 'BTCUSDT')
+ | mark_price | STRING | Yes | Mark price that the exchange uses to calculate liquidations (stored as string for precision)
+ | index_price | STRING | Yes | Index price from the underlying spot exchanges (stored as string for precision)
+ | estimated_settle_price | STRING | Yes | Estimated settlement price at contract expiration (stored as string for precision)
+ | funding_rate | STRING | Yes | Current funding rate for perpetual contracts, as a fraction for each funding period (0.0001 = 0.01 %; stored as string for precision). Kraken Futures and Lighter history before the 2026-09 data-integrity release use other units (refer to the venue notes)
+ | next_funding_time | INT64 | Yes | Unix timestamp when the next funding payment will occur. Lighter history before the 2026-09 data-integrity release contains the last funding time instead
+Venue-specific semantics
+OKX perpetual swaps: From the 2026-09 data-integrity release, the event_time of funding rows is the publish time of the funding message (ts). The settlement time (fundingTime) stays in next_funding_time. Before this release, funding rows contained the next settlement time (fundingTime) as event_time. This timestamp is later than the time when the value was observed. Thus, a join on it adds look-ahead bias. For older history, use received_time. We plan a correction of the published history.
+Kraken Futures: From the 2026-09 data-integrity release, funding_rate is the Kraken relative funding rate. This is a fraction for each funding period, and you can compare it with other venues. Earlier files contained the Kraken absolute funding rate (quote currency per contract). We corrected these files on 2026-09-30. For funding periods from 2025-09-24, the corrected value is the relative rate that Kraken published. The Kraken funding history does not include earlier periods. For these periods, we calculated the value from the absolute rate and the index price, and it is within about 0.2 %.
+Lighter: From the 2026-09 data-integrity release, funding_rate is a fraction, and next_funding_time is the next funding time. Earlier files had funding_rate in percent, and next_funding_time contained the last funding time. We corrected these files on 2026-09-30.
+Bybit Futures: Before the 2026-09 data-integrity release, ticker, mark price and open interest rows were change-only deltas. A field that did not change in a message is null. An open interest file exists only for hours in which open interest changed. Forward-fill the values for each symbol, and look back into earlier hours if necessary. From the release, each row contains the full carried-forward state. After a collector loses its state, the first hour contains only the fields that the collector received during that hour.
+Binance Futures: Before the 2026-09 data-integrity release, COIN-M contracts (for example, BTCUSD_PERP, BTCUSD_260925) and delisted USDⓈ-M symbols also appeared under binance_futures in ticker, mark price and liquidation files. For COIN-M, the volumes and quantities in these files are in contracts. From the release, we do not publish these symbols there. If you need only listed USDⓈ-M markets, filter them out of older history.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Price Types
+Mark Price
+Fair value price that exchanges use for liquidations
+Based on the index price and the funding premium
+Prevents manipulation
+Updates continuously
+Exchanges use it for PnL calculations
+Index Price
+Weighted average of prices from spot exchanges
+Composite price from more than one spot market
+Reference for the calculation of the mark price
+Updates in real time
+Settlement Price
+Estimated final settlement price
+For contract expiration
+Based on the underlying spot price
+Exchanges use it for the final settlement
+Use the Data
+Python
+Copy
+1# Analyze mark price vs index price
+2import cryptohftdata as chd
+3import pandas as pd
+4import matplotlib.pyplot as plt
+5
+6# Initialize the client
+7client = chd.CryptoHFTDataClient(api_key="your-api-key-here")
+8
+9# Get mark price data
+10df = client.get_mark_price(
+11    symbol="BTCUSDT",
+12    exchange=chd.exchanges.BINANCE_FUTURES,
+13    start_date="2025-08-01",
+14    end_date="2025-08-01"
+15)
+16
+17# Convert string prices to float for analysis
+18df['mark_price_float'] = df['mark_price'].astype(float)
+19df['index_price_float'] = df['index_price'].astype(float)
+20
+21# Calculate mark price premium
+22df['mark_premium'] = df['mark_price_float'] - df['index_price_float']
+23df['mark_premium_pct'] = (df['mark_premium'] / df['index_price_float']) * 100
+24
+25# Analyze funding rate impact
+26df['funding_rate_pct'] = df['funding_rate'].astype(float) * 100
+27
+28print("Mark Price Analysis:")
+29print(f"Average mark premium: {df['mark_premium_pct'].mean():.4f}%")
+30print(f"Current funding rate: {df['funding_rate_pct'].iloc[-1]:.4f}%")
+31
+32# Plot mark price vs index price
+33plt.figure(figsize=(12, 8))
+34plt.subplot(2, 1, 1)
+35plt.plot(df.index, df['mark_price_float'], label='Mark Price', linewidth=2)
+36plt.plot(df.index, df['index_price_float'], label='Index Price', linewidth=2)
+37plt.title('Mark Price vs Index Price')
+38plt.legend()
+39plt.ylabel('Price (USDT)')
+40
+41plt.subplot(2, 1, 2)
+42plt.plot(df.index, df['mark_premium_pct'], label='Mark Premium %', color='red')
+43plt.title('Mark Price Premium')
+44plt.ylabel('Premium (%)')
+45plt.xlabel('Time')
+46plt.legend()
+47plt.tight_layout()
+48plt.show()
+49Previous · Python SDKTickerNext · Python SDKOpen Interest
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

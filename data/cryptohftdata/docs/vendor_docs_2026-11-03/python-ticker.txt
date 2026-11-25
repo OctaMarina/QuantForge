@@ -1,0 +1,153 @@
+Python SDK Ticker | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKTicker
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Ticker Data
+Download Ticker Statistics
+Download 24-hour ticker statistics, which include price changes, volume, and high/low prices.
+SDKclient.get_ticker()
+Python SDK Example
+Python
+Copy
+1# Get ticker data
+2df = client.get_ticker(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_SPOT,
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes comprehensive 24h statistics
+10print(df.head())
+11
+12# Analyze price movements
+13price_change_pct = df['price_change_percent'].astype(float)
+14print("Price change distribution:")
+15print(price_change_pct.describe())
+16
+Data Format - CommonTicker
+We keep ticker data in the CommonTicker structure. This structure contains a full set of 24-hour trading statistics. These statistics include price movements, volume metrics, and trade counts:
+Schema Overview
+Each ticker event contains time data, a full set of price statistics, volume data, and trading activity metrics for a 24-hour period.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the ticker event
+ | event_time | INT64 | No | Unix timestamp when the exchange generated the ticker (the time unit changes with the exchange)
+ | symbol | STRING | No | Trading pair symbol (for example, 'BTCUSDT')
+ | price_change | STRING | Yes | Absolute price change during the 24h period (stored as string for precision)
+ | price_change_percent | STRING | Yes | Price change during the 24h period, in percent (-2.07 means -2.07 %). Bybit history before the 2026-09 data-integrity release contains a fraction (-0.0207)
+ | weighted_average_price | STRING | Yes | Volume-weighted average price during the 24h period
+ | last_price | STRING | Yes | Price of the most recent trade
+ | last_quantity | STRING | Yes | Quantity of the most recent trade
+ | open_price | STRING | Yes | Opening price at the start of the 24h period
+ | high_price | STRING | Yes | Highest price during the 24h period
+ | low_price | STRING | Yes | Lowest price during the 24h period
+ | base_asset_volume | STRING | Yes | Total volume in the base asset (for example, BTC in BTCUSDT). OKX perpetual swap history before the 2026-09 data-integrity release contains contracts (refer to the venue notes)
+ | quote_asset_volume | STRING | Yes | Total volume in the quote asset (for example, USDT in BTCUSDT). Empty for OKX perpetual swaps from the 2026-10 data-quality release. Earlier OKX swap history contains an estimate or the base-coin volume (refer to the venue notes)
+ | statistics_open_time | INT64 | Yes | Unix timestamp when the 24h statistics period started
+ | statistics_close_time | INT64 | Yes | Unix timestamp when the 24h statistics period ended
+ | first_trade_id | INT64 | Yes | ID of the first trade in the 24h period
+ | last_trade_id | INT64 | Yes | ID of the last trade in the 24h period
+ | total_trades | INT64 | Yes | Total number of trades that occurred during the 24h period
+Venue-specific semantics
+OKX perpetual swaps: From the 2026-09 data-integrity release, base_asset_volume is the 24h volume in the base coin (volCcy24h) for linear (BTC-USDT-SWAP) and inverse (BTC-USD-SWAP) swaps. quote_asset_volume is that volume multiplied by the last price. This product gives each earlier fill the value of the current price. Thus, from the 2026-10 data-quality release, quote_asset_volume is empty for swaps, because OKX does not publish swap quote turnover. Before the 2026-09 release, base_asset_volume contained the volume in contracts, and quote_asset_volume contained the base-coin volume. We plan a correction of the published history (base coin volume, empty quote volume). OKX spot volumes are not affected.
+Bybit: From the 2026-09 data-integrity release, price_change_percent is in percent. Before this release, Bybit published a fraction (-0.0207 means -2.07 %).
+Bybit Futures: Before the 2026-09 data-integrity release, ticker, mark price and open interest rows were change-only deltas. A field that did not change in a message is null. An open interest file exists only for hours in which open interest changed. Forward-fill the values for each symbol, and look back into earlier hours if necessary. From the release, each row contains the full carried-forward state. After a collector loses its state, the first hour contains only the fields that the collector received during that hour.
+Binance Futures: Before the 2026-09 data-integrity release, COIN-M contracts (for example, BTCUSD_PERP, BTCUSD_260925) and delisted USDⓈ-M symbols also appeared under binance_futures in ticker, mark price and liquidation files. For COIN-M, the volumes and quantities in these files are in contracts. From the release, we do not publish these symbols there. If you need only listed USDⓈ-M markets, filter them out of older history.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Data Categories
+Price Metrics
+last_price - Current market price
+open_price - Price at the start of the 24h period
+high_price - Highest price in 24h
+low_price - Lowest price in 24h
+weighted_average_price - VWAP
+Volume Metrics
+base_asset_volume - Volume in the base currency
+quote_asset_volume - Volume in the quote currency
+last_quantity - Size of the latest trade
+total_trades - Number of trades
+Change Metrics
+price_change - Absolute price change
+price_change_percent - Relative price change
+statistics_open_time - Start of the period
+statistics_close_time - End of the period
+Important Note
+Some exchanges include a field in an update only when its value changed. For these exchanges, a null column means that the value did not change since the last non-null update. That update can be in the file of an earlier hour.Previous · Python SDKTradesNext · Python SDKMark Price
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

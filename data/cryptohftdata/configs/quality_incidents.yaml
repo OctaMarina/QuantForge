@@ -1,0 +1,8 @@
+# Quality incidents, for excluding data from experiments. Identified after the fact: never a model input and never a dataset column.
+incidents:
+  - id: book_phantom_level_2025-08-29
+    start: 2025-08-29T06:37:05Z
+    end: 2025-08-29T06:37:36Z
+    scope: book
+    reason: "Before the first crossed message of the stream, a level later shown inconsistent can appear as certified top of book. Not detectable causally."
+    use: exclude_only

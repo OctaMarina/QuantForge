@@ -1,0 +1,198 @@
+Known Data Gaps & Corrections | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Data ReferenceKnown Gaps & Corrections
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Data Reference
+Known Gaps & Corrections
+This page lists hours that are missing or incomplete in the published archive. It also lists changes in behaviour that change how you read rows, and the corrections that we make to files that we already published. This information comes from an audit of all exchanges and data types against reference data from the exchanges. We completed the audit in September 2026.
+Status of corrections
+A corrected file replaces the original file under the same object key ({exchange}/{YYYY-MM-DD}/{HH}/{symbol}_{data_type}.parquet) and keeps the same schema. Thus, your download code does not need changes. Corrections marked Published include the full history of the affected files. If you downloaded affected hours before the publish date, download them again. Planned corrections are not in the files at this time. Under review means that we check how many published files have the problem, or if a source is available to recover the data, before we decide. We will not do a cleanup of the full archive for entries marked Not planned.
+Changes in the 2026-10 data-quality release
+This release corrects timestamp units, exchange clocks, volume units and order book resets. We found these problems in an audit of all collectors and processors in October 2026. For corrections to files that we already published, refer to Corrections to published history. For data that it is not possible to recover, refer to Partially affected periods.
+Deployment status
+Not yet deployed. When we deploy it, this section will show the first corrected hour for each exchange. Files for earlier hours keep the previous behaviour until we publish the corrections below.
+Changes in behaviour in the 2026-10 data-quality release
+ | Exchange ID | Data type | Before the release | From the release
+ | bitget_futures, bitget_spot | ticker | price_change_percent as Bitget's fraction (0.0123 = 1.23 %) | price_change_percent in percent, the same as all other exchanges
+ | kraken_spot | orderbook, ticker | event_time is our receive time in nanoseconds | event_time is our receive time in milliseconds
+ | kraken_spot | trades | If we could not read the trade timestamp from Kraken, trade_time used our receive time in nanoseconds as a fallback | The fallback is our receive time in milliseconds
+ | hyperliquid_spot, hyperliquid_futures | mark_price, open_interest | event_time and timestamp are our receive time in nanoseconds | Our receive time in milliseconds (the venue does not send a timestamp)
+ | lighter | mark_price, ticker, open_interest | event_time and timestamp are our receive time in nanoseconds | Lighter's publication time in milliseconds (our receive time in milliseconds if a message does not have a publication time)
+ | lighter | orderbook | event_time is our receive time; transaction_time is empty | event_time is Lighter's publication time and transaction_time is Lighter's matching-engine update time. Both are in milliseconds
+ | bitget_futures, bitget_spot | orderbook | transaction_time is empty | transaction_time is Bitget's matching-engine time; event_time is the push time, as before
+ | kraken_derivatives | open_interest (REST) | timestamp is the time of the last trade of the contract, in nanoseconds. On quiet markets, this time can be hours old | timestamp is the time at which Kraken sent the open interest, in milliseconds
+ | kraken_derivatives | ticker (PI_, FI_) | base_asset_volume contains the contract count. For inverse contracts, this count is a USD amount | base_asset_volume is empty, because the exact base-coin volume needs the price of each fill. Linear PF_ contracts do not change
+ | kraken_derivatives | candles (PI_, FI_) | base_volume contains the contract count (USD) | The same value is in quote_volume (USD); base_volume is empty
+ | okx_futures | ticker (swaps) | quote_asset_volume = base volume × last price. This calculation uses the current price for all earlier fills | quote_asset_volume is empty, because OKX does not publish a quote turnover for swaps. base_asset_volume does not change
+ | lighter | trades | Liquidation executions were missing (Lighter sends them separately from other trades). We dropped the trades that Lighter replays after a reconnect | Liquidation executions are included (order_type = liquidation), and replayed trades fill reconnect gaps. We still drop replayed trades from before the arrival hour
+ | kraken_derivatives | trades, liquidations | We dropped the fills that Kraken replays after a reconnect | Replayed fills fill reconnect gaps, and we remove duplicate fills by trade ID. We still drop replayed fills from before the arrival hour
+ | bybit, bybit_spot | orderbook | When we captured REST depth snapshots, we published them as order book resets. But their update IDs are from Bybit's 1,000-level stream, not from the 50-level stream that the order book uses | Only Bybit's WebSocket snapshots reset the order book
+ | kraken_spot, lighter | orderbook | When we captured REST snapshots, we published them as order book resets. The Kraken REST snapshot has a maximum of 500 of the 1,000 levels and no sequence. The Lighter REST snapshot has no sequence number | Only the WebSocket snapshots of the venue reset the order book
+ | binance_spot, binance_futures, aster_futures, okx_spot, okx_futures, hyperliquid_spot, hyperliquid_futures, kraken_derivatives | orderbook | We published no rows for a snapshot of an empty order book. Thus, a replayed order book kept its previous levels | An empty snapshot publishes one snapshot row with side = noop and the sequence of the snapshot. When you see this row, clear the order book
+ | hyperliquid_spot, hyperliquid_futures | orderbook | We removed levels with an empty, zero or negative size from a snapshot, and gave no warning | If a snapshot has an invalid level, we do not publish any part of that snapshot. The replay report for the hour marks the order book as unverified until the next valid snapshot
+ | okx_spot | orderbook (REST snapshot rows) | order_count was always 0, because we read it from a deprecated OKX field | order_count is the number of orders that OKX reports
+ | bitget_futures | liquidations | If a liquidation did not have a valid price, we published its USD amount as the base quantity | We do not publish these liquidations
+ | bybit | open_interest | The row at the start of the hour could miss updates that Bybit sent immediately before the hour but that we received immediately after it | The row at the start of the hour includes these updates. Its received_time is not earlier than the time when we received them
+ | lighter | candles (spot) | Spot markets have the names that Lighter uses, for example ETH/USDC | Spot markets have the same names as in the trade and order book datasets, for example ETH_USDC
+Changes from the 2026-09 data-integrity release
+The changes that follow apply to files that we published from the 2026-09 data-integrity release onward. The table gives specific dates where necessary. Earlier files can keep the previous behaviour. A table below shows which corrections to historical files we plan. The venue notes on each data type page (for example trades and liquidations) tell you how to use older files.
+Changes in behaviour from the 2026-09 data-integrity release
+ | Exchange ID | Data type | Before the release | From the release
+ | okx_spot, okx_futures | trades | One row for each taker order at each price level. The trades channel of the exchange combines fills, trade_id is the last fill ID and quantity is the sum of the sizes | One row for each fill (trades-all channel)
+ | okx_futures | mark_price (funding rows) | event_time is the next settlement time (fundingTime), which is later than the time at which the rate was observed | event_time is the publish time of the funding message (ts); fundingTime is still in next_funding_time
+ | okx_futures | ticker | base_asset_volume in contracts, quote_asset_volume in base coin | base_asset_volume in base coin (volCcy24h) for linear and inverse swaps; quote_asset_volume = base volume × last price (empty from the 2026-10 release, refer to the table above)
+ | kraken_derivatives | mark_price | funding_rate is Kraken's absolute funding rate | funding_rate is Kraken's relative funding rate, a fraction for each funding period
+ | kraken_derivatives | ticker | price_change contains Kraken's 24h change percentage; price_change_percent is not a percentage | price_change = last price − 24h open; price_change_percent = Kraken's 24h change percentage
+ | kraken_spot | orderbook | Levels that went out of Kraken's 1,000-level window had no delete row. Thus, a replay had to truncate the order book | We publish levels that go out of the window as delete rows. Thus, a replay without more steps keeps 1,000 levels per side
+ | kraken_derivatives | open_interest (PI_, FI_) | sum_open_interest_value = contracts × price | sum_open_interest_value = contracts × contract size (USD)
+ | lighter | open_interest | sum_open_interest contains the USD notional | sum_open_interest in base units, sum_open_interest_value = USD notional
+ | lighter | mark_price | funding_rate in percent; next_funding_time contains the last funding time | funding_rate as a fraction; next_funding_time is the next funding time
+ | bybit | ticker | price_change_percent as a fraction (-0.0207 = -2.07 %) | price_change_percent in percent
+ | bybit | ticker, mark_price, open_interest | Deltas with changes only: unchanged fields are null. An open interest file is available only for hours in which open interest changed | The full state for each symbol, carried forward. Each symbol with known open interest has a row at the start of the hour (timestamp and received_time = start of the hour)
+ | bitget_futures | open_interest | sum_open_interest_value is empty | sum_open_interest_value = open interest (base coin) × mark price
+ | binance_futures | ticker, mark_price, liquidations | COIN-M contracts (for example BTCUSD_PERP, BTCUSD_260925, with volumes and quantities in contracts) and delisted USDⓈ-M symbols were included | We publish only listed USDⓈ-M symbols under binance_futures
+ | binance_spot, binance_futures, aster_futures | orderbook | We published each REST depth snapshot two times (on Binance, one copy has received_time = event time × 1e6) | Collectors that we started or restarted with the updated version on or after 2026-09-30 publish each REST depth snapshot one time
+ | hyperliquid_spot, hyperliquid_futures | trades | Trades that the exchange replayed after a reconnect could occur again in the file of a later hour | We do not publish replayed trades again
+Corrections to published history
+This table shows which historical files we correct and which problems we do not correct. Corrections include the full history of the affected files, unless the table gives a smaller scope.
+Corrections to published history and their status
+ | Correction | Affected files | Status
+ | Kraken Futures funding rate changed to the relative rate. For funding periods from 2025-09-24, the value is the relative rate that Kraken published. Kraken's funding history does not include earlier periods. For these periods and for about 0.02 % of later rows, we calculated the value from the absolute rate and the index price observed in that period. These values are within about 0.2 % of Kraken's value | kraken_derivatives mark_price | Published 2026-09-30
+ | Kraken Futures ticker price change corrected: price_change = last − open, price_change_percent = Kraken's percentage | kraken_derivatives ticker | Published 2026-09-30
+ | Kraken inverse open interest value calculated again from the contract size | kraken_derivatives open_interest, PI_ and FI_ symbols | Published 2026-09-30
+ | Lighter open interest in base units with USD value; funding rate as a fraction; next funding time | lighter open_interest, mark_price | Published 2026-09-30
+ | OKX funding rows given new timestamps, so that event_time is not the next settlement time. We did not store the original publish time. Thus, repaired rows use our receive time in milliseconds. This time is usually about 140 ms after OKX's publish time | okx_futures mark_price | Planned
+ | OKX perpetual swap ticker volumes corrected: base_asset_volume in base coin; quote_asset_volume made empty, the same as in the 2026-10 release | okx_futures ticker | Planned
+ | Duplicate BitMEX liquidations removed; event_time and trade_time converted from nanoseconds to milliseconds | bitmex liquidations | Planned
+ | Open interest snapshots repeated from earlier hours removed | binance_futures open_interest | Planned
+ | Duplicate copies of REST depth snapshots in older files. We do not plan a cleanup of the full archive, because identical consecutive copies do not change the reconstructed order book | binance_spot, binance_futures, aster_futures orderbook | Not planned
+ | Trades repeated from earlier hours removed | hyperliquid_spot, hyperliquid_futures trades | Planned
+ | Trades that Lighter sent two times removed (358 rows with the same trade_id as an earlier row and identical values except received_time). We keep the first copy that we received | lighter trades, 2026-04-07 18 (14 markets) and 2026-08-23 13 (9 markets) | Published 2026-09-30
+ | Order book updates put back in exchange sequence order. A backward step of our server clock put some updates in the wrong order at 22:05:19, and replay stopped. We increased the received_time of the moved rows by less than 0.5 s, so that it increases. The files for hours 23 and 00 start with a checkpoint snapshot again | lighter orderbook, 2026-10-20 22 to 2026-10-21 00 (14 markets) | Published 2026-10-21
+ | Missing BitMEX trades backfilled from the BitMEX REST API. Backfilled rows have no receive time. Thus, received_time = trade_time × 1e6 | bitmex trades | Planned
+ | OKX trades for about the last three months rebuilt from the OKX REST API as one row for each fill | okx_spot, okx_futures trades | Planned
+ | Hour 2026-09-22 21 backfilled from Binance's public trade archives | binance_spot trades, aggTrades | Planned
+ | Bybit trade gaps backfilled from Bybit's public trade archives. Backfilled rows have a trade_id that we make from the ID in the archive, not the WebSocket trade ID | bybit, bybit_spot trades | Planned
+ | Timestamps published in nanoseconds converted to milliseconds. We change only values above the millisecond range. We did not store Kraken's open interest time or Lighter's publication time. Thus, repaired rows keep our receive time | kraken_spot orderbook, ticker event_time and trades trade_time fallbacks; hyperliquid_spot, hyperliquid_futures mark_price, open_interest; lighter mark_price, ticker, open_interest; kraken_derivatives open_interest (REST) | Planned
+ | Bitget ticker price_change_percent multiplied by 100 to give percent | bitget_futures, bitget_spot ticker | Planned
+ | Kraken inverse candles downloaded again from Kraken, so that the USD contract volume is in quote_volume | kraken_derivatives candles, PI_ and FI_ symbols | Planned
+ | Kraken inverse ticker base_asset_volume made empty (it contained the USD contract count) | kraken_derivatives ticker, PI_ and FI_ symbols | Planned
+ | Bybit REST depth snapshots removed from order books, and replay reports calculated again. First, we check if we published any of them | bybit, bybit_spot orderbook | Under review
+ | Bitget liquidations removed if their quantity is the USD amount (no valid price). First, we check if we published any of them | bitget_futures liquidations | Under review
+ | Bybit REST open interest rows removed if their timestamp is our receive time in nanoseconds. It is not possible to recover the exchange time. First, we check if we published any of them | bybit open_interest | Under review
+ | Lighter spot candles published under the Lighter market name (for example ETH/USDC) moved to the ETH_USDC name. First, we check if we published any of them | lighter candles, spot markets | Under review
+ | Kraken Futures trades and liquidations that we missed during reconnects backfilled from Kraken's public execution history | kraken_derivatives trades, liquidations | Under review
+ | Empty mark price and open interest files for spot markets removed (spot markets do not have a mark price or open interest) | bitget_spot mark_price, open_interest, 2025-07-15 → 2026-09-20 | Scheduled for removal
+Missing hours
+We did not publish files for the hours that follow. Times are in UTC. Each range includes its first and last hour partition (YYYY-MM-DD HH).
+Hours with no published files, by exchange
+ | Exchange ID | Missing hours (UTC)
+ | bitget_futures | 2025-09-23 07 → 2025-12-26 20; 2026-01-28 03 → 17; 2026-02-04 07 → 2026-02-14 18; 2026-04-10 10 → 2026-04-11 08; several shorter gaps
+ | bybit | 2025-11-26 10 → 2025-12-26 19; 2026-04-13 15 → 2026-04-14 21
+ | bybit_spot | 2026-04-12 11 → 2026-04-14 21
+ | kraken_spot, kraken_derivatives | Hours on 2025-10-21 and 2025-10-22; 2026-07-09 21 → 2026-07-10 09; 2026-08-19 14 → 2026-08-21 14; 2026-09-03 about 15 → 20; several shorter gaps
+ | lighter | 2026-02-13 12 → 2026-02-14 18 (also refer to the periods with only part of the market universe, below)
+ | hyperliquid_futures | 2026-04-12 09 → 16
+ | bitget_spot | 2025-08-29 03 → 09; outage from 2026-09-20 03:08 (the 2026-09-20 03 files contain only 03:00–03:08)
+Some other hours have only part of the data. Files are available, but only for part of the symbol universe or with less data than usual. If your analysis needs specific hours, list the prefixes of these hours with flat-file access. Then make sure that the symbols you need are available.
+Partially affected periods
+Periods in which part of the data is missing or not usable
+ | Exchange ID | Period (UTC) | Effect | Recovery
+ | binance_spot | 2026-09-22, 21:15:30 → 22:00 | For most symbols (about 1,300), all data types are missing for the remaining part of the hour. But we published the hour as complete. | We plan a backfill of trades and aggTrades from Binance's public archives. It is not possible to recover the other data types.
+ | bitget_futures, bitget_spot | 2026-05-20 03 → 2026-05-24 08 | Order books are missing. We published trades and tickers as usual. | Not possible to recover (no public order book history).
+ | lighter | For example 2026-09-22 16:02 → 2026-09-23 about 00:30, and from 2026-09-23 14:32 | We published only part of the market universe. In the latest event, 144 of 210 markets stopped, including ETH, HYPE and XRP. Before this, about 90 shorter events occurred in which only part of the universe was published. | Not possible to recover (no public history for these streams).
+ | lighter | 2026-03-24 → 2026-04-14 | The collector connections closed every few minutes, until a keepalive fix for the collector on 2026-04-14. Trades that Lighter sent during a reconnect are missing (gaps of about 1–9 minutes on liquid markets). The first trades after each reconnect arrived 1–3 s late. | Not possible to recover (no public history for these streams).
+ | lighter | Before the 2026-09 data-integrity release, for example BNB 2026-02-24 15, AMD 2026-09-02 16 | After some reconnects, the order book snapshot and the updates after it did not agree. A level was never deleted, or updates from two sequences were mixed. Thus, the replayed order book crossed. In the BNB example, it stayed crossed for about 7 hours. Files from before the release do not have a sequence field that lets you detect this problem (refer to the order book venue notes). | Not possible to recover. If an order book is crossed, treat it as invalid. Then start again from the next snapshot.
+ | bitmex | Liquid days in all of the history, for example XBTUSD on 2025-11-15, 2026-01-15, 2026-05-15 | 5–20 % of trades are missing, compared with the trade history of BitMEX. | We plan a backfill from the BitMEX REST API.
+ | lighter | Before the 2026-10 data-quality release | Liquidation executions are missing from trades. We did not publish the trades that Lighter replayed after a reconnect. | Not possible to recover (no public history for these executions).
+ | kraken_derivatives | Before the 2026-10 data-quality release | We did not publish the fills and liquidations that Kraken replayed after a reconnect. Thus, trades and liquidations have reconnect gaps. | A backfill from Kraken's public execution history is under review.
+ | binance_spot, binance_futures, aster_futures, okx_spot, okx_futures, hyperliquid_spot, hyperliquid_futures, kraken_derivatives | Before the 2026-10 data-quality release | We did not publish a snapshot of an empty order book. Thus, a replayed order book can keep levels that the exchange already removed, until the next snapshot that is not empty. This problem occurs mainly on halted, delisted or very quiet markets. | Not possible to recover (we did not store the empty snapshots). Be careful if an order book on such a market has no more changes.
+ | lighter, kraken_derivatives | Before the 2026-10 data-quality release | We did not store the publication and matching-engine times of Lighter, or the time at which Kraken sent the open interest. The time columns contain our receive time. | Not possible to recover.
+ | binance_futures | Most hours since at least mid-August 2026, at about hh:02 → hh:05 | Gaps of about 1–2 minutes in the mark price stream. | Not possible to recover (no public history of mark price ticks).
+ | bitget_spot | 2025-07-15 → 2026-09-20 | mark_price and open_interest files are available, but all value columns are empty. Spot markets do not have a mark price or open interest. | Do not use these files. We will remove them.
+Short reconnect gaps
+Collectors reconnect at intervals (some venues require this) and after network errors. We cannot recover the data that the exchange sends during a reconnect. This causes gaps of some seconds, as follows:
+Binance (spot and futures): We replace each connection about every 24 hours, because Binance requires this. Trades that Binance sends during the reconnect are missing and show as gaps in the trade IDs.
+Bybit trades: Gaps from a few seconds up to about 3 minutes. Most of these gaps occur near a daily reconnect between about 02:00 and 02:50 UTC. We plan a backfill from Bybit's public trade archives.
+Kraken spot: Reconnect gaps of 3–7 seconds. Sometimes, order book updates stop for 10–20 minutes while trades continue.
+Hyperliquid: We can lose a small number of trades near reconnects.
+If a venue gives sequence fields (order book update IDs, consecutive Binance trade IDs), use them to detect these gaps. For order books, discard the local order book at a gap. Then start again from the next snapshot.
+BitMEX (historical dataset)
+BitMEX is closed. BitMEX settled its perpetual contracts on 2026-09-16 at 12:00 UTC and delisted its spot pairs on 2026-09-21. On 2026-09-22, BitMEX announced "BitMEX Exchange Now Closed". We stopped the collection. You can download the bitmex dataset, from 2025-09-29 to 2026-09-22, through the Python SDK, the REST API and flat-file access. Files for the last hours contain little or no activity.
+When you use this dataset, refer to the venue notes for the raw quantity units of each instrument and for the liquidation duplicates. Also refer to the missing trades in the tables above.Previous · Flat File Accessboto3Next · Exchange Wire FormatsOverview
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

@@ -1,0 +1,196 @@
+Python SDK Trades | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKTrades
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Trade Data
+Download Trade History
+Download individual trade executions with their timestamps, prices, quantities, and trade direction.
+SDKclient.get_trades()
+Python SDK Example
+Python
+Copy
+1# Get trade data
+2df = client.get_trades(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_SPOT,
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes: timestamp, price, quantity, side (buy/sell), trade_id
+10print(df.head())
+11
+12# Analyze trade volume by side
+13volume_by_side = df.groupby('side')['quantity'].sum()
+14print(volume_by_side)
+15
+Data Format - CommonTrade
+We keep trade data in the CommonTrade structure. This structure contains individual trade executions with precise time data and market information:
+Schema Overview
+Each trade event contains the execution time, symbol information, price/quantity data, and indicators of market direction.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the trade event
+ | event_time | INT64 | No | Unix timestamp when the exchange generated the event (the time unit changes with the exchange)
+ | symbol | STRING | No | Trading pair symbol (for example, 'BTCUSDT')
+ | trade_id | INT64 | No | Exchange-specific trade identifier. For OKX history before the 2026-09 data-integrity release, it is the last fill ID of an aggregated row (refer to the venue notes)
+ | price | STRING | No | Trade execution price (stored as string for precision)
+ | quantity | STRING | No | Trade size (stored as string for precision). The unit is the base asset on most venues. OKX derivatives use contracts, and BitMEX uses raw instrument units (refer to the venue notes)
+ | trade_time | INT64 | No | Unix timestamp when the trade occurred (the time unit changes with the exchange)
+ | is_buyer_maker | BOOLEAN | No | True if the buyer was the maker (passive side), false if the buyer was the taker
+ | order_type | STRING | No | Type of order that caused this trade (for example, "LIMIT", "MARKET"), if the venue publishes it. Binance spot does not publish an order type. Thus, the column is always "MARKET" there as a placeholder
+Venue-specific semantics
+OKX: Before the 2026-09 data-integrity release, OKX trades come from the trades channel of the exchange. This channel aggregates fills. There is one row for each taker order at each price level. quantity is the sum of the sizes, and trade_id is the last fill ID of the aggregate. The traded volume is complete, but the row counts and sizes are not per fill. From the release, rows come from the trades-all channel, with one row for each fill. We plan a per-fill repair of about the last three months of history.
+OKX perpetual swaps: Sizes are in contracts. Multiply each size by the contract value of the instrument (ctVal from the OKX instruments endpoint, in ctValCcy units). This unit is the base coin for linear swaps, for example BTC-USDT-SWAP. It is USD for inverse swaps, for example BTC-USD-SWAP. OKX spot sizes are already in the base coin.
+Binance Spot: The spot trade stream does not contain an order type. Thus, order_type is always MARKET as a placeholder. Do not use this column. Use is_buyer_maker to find the aggressor side.
+Bybit: After a reconnect, trades can include rows that we backfilled from the Bybit REST API. These rows use the same schema. We remove duplicates by trade ID. If the two copies exist, we keep the WebSocket copy.
+Lighter: trade_id is one counter for the full exchange, and it is unique across markets. Sometimes Lighter sends a trade a second time, some seconds later. We publish only the first delivery (we corrected the history on 2026-09-30). The Lighter trade feed can also be late by seconds, and sometimes by minutes, on many markets at the same time. We put each row in the file for its arrival hour (received_time). Thus, a late trade can be in the file for the next hour. If you need a complete window, filter on trade_time and also load the next hour.
+Hyperliquid: Before the 2026-09 data-integrity release, a trade that the exchange replayed after a reconnect could go again into the file of a later hour. This also occurred for trades from much earlier. Remove duplicates from the history on (symbol, trade_id, trade_time). The Hyperliquid tid is unique only together with the coin and the time. We plan a repair of the published history. From the release, we do not publish replayed trades again.
+BitMEX: Quantities are in raw units that are different for each instrument: XBTUSD in USD contracts, XBTUSDT in 1e-6 BTC, ETHUSDT in 1e-5 ETH, and spot pairs in 1e-8 of the base asset. Before you compare with other venues, check the multiplier of the instrument.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Trade Direction Analysis
+Sell Trades (Taker Sell)
+Market sell orders that hit bid levels
+is_buyer_maker = true
+The buyer placed a passive order (maker)
+The seller took liquidity (taker)
+Usually bearish pressure
+Buy Trades (Taker Buy)
+Market buy orders that hit ask levels
+is_buyer_maker = false
+The seller placed a passive order (maker)
+The buyer took liquidity (taker)
+Usually bullish pressure
+Use the Trade Data
+Python
+Copy
+1# Analyze trade flow from CryptoHFTData using Python
+2import cryptohftdata as chd
+3import pandas as pd
+4import numpy as np
+5
+6# Initialize the client
+7client = chd.CryptoHFTDataClient(api_key="your-api-key-here")
+8
+9# Load trade data
+10df = client.get_trades(
+11    symbol="BTCUSDT",
+12    exchange=chd.exchanges.BINANCE_SPOT,
+13    start_date="2025-08-01",
+14    end_date="2025-08-01"
+15)
+16
+17# Convert timestamps to datetime
+18df['trade_datetime'] = pd.to_datetime(df['trade_time'], unit='ms')
+19df['received_datetime'] = pd.to_datetime(df['received_time'], unit='ns')
+20
+21# Convert price and quantity to float for analysis
+22df['price_float'] = df['price'].astype(float)
+23df['quantity_float'] = df['quantity'].astype(float)
+24
+25# Calculate trade volume in quote currency
+26df['volume_usd'] = df['price_float'] * df['quantity_float']
+27
+28# Determine trade direction based on is_buyer_maker
+29df['trade_side'] = df['is_buyer_maker'].map({True: 'sell', False: 'buy'})
+30
+31# Calculate buy/sell pressure
+32buy_volume = df[df['trade_side'] == 'buy']['volume_usd'].sum()
+33sell_volume = df[df['trade_side'] == 'sell']['volume_usd'].sum()
+34total_volume = buy_volume + sell_volume
+35
+36buy_pct = buy_volume/total_volume*100
+37sell_pct = sell_volume/total_volume*100
+38net_flow = buy_volume - sell_volume
+39
+40print("Buy Volume: $" + "{:,.2f}".format(buy_volume) + " (" + "{:.1f}".format(buy_pct) + "%)")
+41print("Sell Volume: $" + "{:,.2f}".format(sell_volume) + " (" + "{:.1f}".format(sell_pct) + "%)")
+42print("Net Flow: $" + "{:,.2f}".format(net_flow))
+43
+44# Calculate VWAP (Volume Weighted Average Price)
+45vwap = (df['price_float'] * df['quantity_float']).sum() / df['quantity_float'].sum()
+46print("VWAP: $" + "{:.2f}".format(vwap))
+47
+48# Analyze latency between exchange and our system
+49df['latency_ms'] = (df['received_time'] / 1000 / 1000) - df['event_time']
+50avg_latency = df['latency_ms'].mean()
+51print("Average Latency: " + "{:.0f}".format(avg_latency) + " milliseconds")
+More Information
+Our blog post gives a detailed tutorial about trade flow analysis. It includes the VWAP calculation and the detection of whale trades: Trade Flow Analysis: How to Calculate VWAP and Detect Whale Trades in PythonPrevious · Python SDKOrder BookNext · Python SDKTicker
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals

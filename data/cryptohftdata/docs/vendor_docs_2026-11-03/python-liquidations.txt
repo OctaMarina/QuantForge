@@ -1,0 +1,278 @@
+Python SDK Liquidations | CryptoHFTData
+CryptoHFTData
+LiquidationsNEW!PricingDatasetsStatusDocsSupportBlog
+LoginGet API Key
+Python SDKLiquidations
+Search docs...Ctrl + K
+Get Started
+Overview
+Quick Start Guide
+Python SDK
+Installation
+Authentication
+Discover Symbols
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+REST API
+Introduction
+Authentication
+Symbols Discovery
+Order Book
+Trades
+Ticker
+Mark Price
+Open Interest
+Liquidations
+Exchange Constants
+Flat File Access
+Introduction
+AWS CLI
+boto3
+Data Reference
+Known Gaps & Corrections
+Exchange Wire Formats
+Overview
+Binance Spot
+Binance Futures
+Bybit Spot
+Bybit Futures
+OKX Spot
+OKX Futures
+Kraken Spot
+Kraken Futures
+Bitget Spot
+Bitget Futures
+Hyperliquid Spot
+Hyperliquid Futures
+Aster Futures
+BitMEX (historical)
+Lighter (Perpetuals & Spot)
+Help with your code
+Our GPT knows these docs. It can write the code for you.Ask on ChatGPT
+Python SDK
+Liquidations
+Download Liquidation Data
+Download liquidation events for futures contracts, with the liquidation price, quantity, and direction.
+SDKclient.get_liquidations()
+Python SDK Example
+Python
+Copy
+1# Get liquidations data (futures exchanges only)
+2df = client.get_liquidations(
+3    symbol="BTCUSDT",
+4    exchange=chd.exchanges.BINANCE_FUTURES,
+5    start_date="2025-08-01",
+6    end_date="2025-08-01"
+7)
+8
+9# Data includes: timestamp, side, price, quantity, time_in_force
+10print(df.head())
+11
+12# Analyze liquidation patterns
+13liquidation_volume = df.groupby('side')['quantity'].sum()
+14print("Liquidation Volume by Side:")
+15print(liquidation_volume)
+16
+About Liquidations
+Long Liquidations: Occur when the exchange closes long positions by force because of losses.
+Short Liquidations: Occur when the exchange closes short positions by force because of losses.
+High liquidation volume: Often shows high volatility or positions with too much leverage.
+Data Format - CommonLiquidation
+We keep liquidation data in the CommonLiquidation structure. This structure contains forced closures of positions, with a full set of order execution details and time data:
+Schema Overview
+Each liquidation event contains time data, symbol data, and detailed metrics for order execution. These metrics include side, price, quantity, and order status. The side field shows which type of position the exchange liquidated.
+Field Definitions
+ | Field | Type | Nullable | Description
+ | received_time | INT64 | No | Unix timestamp (nanoseconds) when our system received the liquidation event
+ | event_time | INT64 | No | Unix timestamp when the exchange generated the event (the time unit changes with the exchange)
+ | symbol | STRING | No | Trading pair symbol (for example, 'BTCUSDT')
+ | side | STRING | No | Side of the liquidation order ("BUY" = the exchange liquidated a short position, "SELL" = the exchange liquidated a long position)
+ | order_type | STRING | No | Type of liquidation order (for example, "MARKET", "LIMIT"), if the venue publishes it. On venues that do not publish it (for example, Bybit and OKX), it is a fixed placeholder
+ | time_in_force | STRING | No | Time-in-force policy of the order (for example, "IOC", "FOK", "GTC"), if the venue publishes it. If not, it is a fixed placeholder
+ | quantity | STRING | No | Total order quantity that the exchange liquidates (stored as string for precision). OKX sizes are in contracts (refer to the venue notes)
+ | price | STRING | No | Liquidation order price (stored as string for precision). Bybit and OKX publish the bankruptcy price
+ | average_price | STRING | No | Average execution price, if the venue publishes it, for example Binance and Aster (stored as string for precision). Bybit and OKX repeat the bankruptcy price here. It is not an execution price
+ | order_status | STRING | No | Status of the liquidation order (for example, "FILLED", "PARTIALLY_FILLED"), if the venue publishes it. On Bybit and OKX, it is a fixed "FILLED" placeholder and not an execution status
+ | last_filled_quantity | STRING | No | Quantity filled in the most recent execution (stored as string for precision)
+ | filled_quantity | STRING | No | Total quantity filled until now (stored as string for precision)
+ | trade_time | INT64 | No | Unix timestamp when the liquidation trade occurred
+Venue-specific semantics
+Binance Futures, Aster: The liquidation stream of the exchange (forceOrder) sends at most one liquidation snapshot per symbol per second. This is the latest liquidation in each 1,000 ms window. The rows are a subset that the exchange samples, and they do not include every liquidation. Thus, counts and totals are a lower limit.
+Bybit, OKX: price and average_price both contain the bankruptcy price that the exchange publishes. This is not an execution price. order_type, time_in_force and order_status are fixed placeholders, and they do not show the execution status. filled_quantity is equal to quantity.
+OKX: OKX can send liquidations hours late (we saw delays of up to about 4 hours, and the cause is on the exchange side). We put each row in the file for its arrival hour (received_time). Thus, a liquidation can be in the file of an hour that is later than its event_time. Load some hours after the end of your window, and filter on event_time. Sizes are in contracts (multiply by ctVal).
+BitMEX: About 95 % of liquidations occur two times, about 5 seconds apart. event_time and trade_time are in nanoseconds, not in milliseconds. Remove the duplicates, and change the timestamps to the correct unit. We plan a correction of the published history. Quantities are in raw units that are different for each instrument.
+Binance Futures: Before the 2026-09 data-integrity release, COIN-M contracts (for example, BTCUSD_PERP, BTCUSD_260925) and delisted USDⓈ-M symbols also appeared under binance_futures in ticker, mark price and liquidation files. For COIN-M, the volumes and quantities in these files are in contracts. From the release, we do not publish these symbols there. If you need only listed USDⓈ-M markets, filter them out of older history.
+For missing hours, partial periods and pending corrections to published history, refer to Known Gaps & Corrections.
+Meaning of the Liquidation Side
+Buy Liquidations (Short Squeeze)
+side = "Buy" means that the exchange liquidated short positions
+The exchange closes short positions by force
+The exchange executes buy orders to cover the shorts
+Usually occurs when the price increases sharply
+Causes more upward pressure on the price
+Sell Liquidations (Long Squeeze)
+side = "Sell" means that the exchange liquidated long positions
+The exchange closes long positions by force
+The exchange executes sell orders to close the longs
+Usually occurs when the price decreases sharply
+Causes more downward pressure on the price
+Use the Data
+Python
+Copy
+1# Detailed liquidation analysis
+2import cryptohftdata as chd
+3import pandas as pd
+4import matplotlib.pyplot as plt
+5import numpy as np
+6
+7# Initialize the client
+8client = chd.CryptoHFTDataClient(api_key="your-api-key-here")
+9
+10# Get liquidation data
+11liq_df = client.get_liquidations(
+12    symbol="ETHUSDT",
+13    exchange=chd.exchanges.BINANCE_FUTURES,
+14    start_date="2025-08-01",
+15    end_date="2025-08-01"
+16)
+17
+18# Convert to numeric for analysis
+19liq_df['price_float'] = liq_df['price'].astype(float)
+20liq_df['quantity_float'] = liq_df['quantity'].astype(float)
+21liq_df['avg_price_float'] = liq_df['average_price'].astype(float)
+22liq_df['filled_qty_float'] = liq_df['filled_quantity'].astype(float)
+23
+24# Calculate notional values
+25liq_df['notional_value'] = liq_df['quantity_float'] * liq_df['avg_price_float']
+26
+27# Separate by liquidation type
+28long_liqs = liq_df[liq_df['side'] == 'SELL']  # Long positions liquidated
+29short_liqs = liq_df[liq_df['side'] == 'BUY']   # Short positions liquidated
+30
+31# Liquidation volume analysis
+32liq_volume_by_side = liq_df.groupby('side').agg({
+33    'quantity_float': 'sum',
+34    'notional_value': 'sum',
+35    'price_float': 'count'
+36}).round(2)
+37
+38print("Liquidation Analysis Summary:")
+39print("=" * 40)
+40print(liq_volume_by_side)
+41
+42# Price impact analysis
+43liq_df_sorted = liq_df.sort_values('trade_time')
+44liq_df_sorted['price_change'] = liq_df_sorted['price_float'].pct_change()
+45
+46# Identify liquidation clusters (high volume periods)
+47time_window = '5min'  # 5-minute windows
+48liq_df_sorted['timestamp'] = pd.to_datetime(liq_df_sorted['trade_time'], unit='ms')
+49liq_df_sorted.set_index('timestamp', inplace=True)
+50
+51# Aggregate by time windows
+52liq_summary = liq_df_sorted.groupby([pd.Grouper(freq=time_window), 'side']).agg({
+53    'quantity_float': 'sum',
+54    'notional_value': 'sum',
+55    'price_float': ['mean', 'count']
+56}).round(2)
+57
+58# Analyze order execution efficiency
+59liq_df['fill_ratio'] = liq_df['filled_qty_float'] / liq_df['quantity_float']
+60liq_df['price_slippage'] = abs(liq_df['price_float'] - liq_df['avg_price_float']) / liq_df['price_float']
+61
+62print("Execution Quality Metrics:")
+63print(f"Average Fill Ratio: {liq_df['fill_ratio'].mean():.2%}")
+64print(f"Average Price Slippage: {liq_df['price_slippage'].mean():.4%}")
+65
+66# Liquidation cascade detection
+67liq_df_sorted['is_cascade'] = False  # Initialize with False
+68
+69for side in liq_df_sorted['side'].unique():
+70    side_mask = liq_df_sorted['side'] == side
+71    side_data = liq_df_sorted[side_mask]
+72    
+73    rolling_1min = side_data['notional_value'].rolling('1min').sum()
+74    rolling_10min_mean = side_data['notional_value'].rolling('10min').mean()
+75    
+76    cascade_mask = rolling_1min > (rolling_10min_mean * 3)
+77    liq_df_sorted.loc[side_mask, 'is_cascade'] = cascade_mask
+78
+79cascade_events = liq_df_sorted[liq_df_sorted['is_cascade']].copy()
+80print(f"Detected {len(cascade_events)} potential liquidation cascade events")
+81
+82# Visualization
+83fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
+84
+85# Liquidation volume by side
+86side_volumes = liq_df.groupby('side')['notional_value'].sum()
+87ax1.bar(side_volumes.index, side_volumes.values, color=['red', 'orange'])
+88ax1.set_title('Total Liquidation Volume by Side')
+89ax1.set_ylabel('Notional Value (USDT)')
+90
+91# Price distribution
+92ax2.hist([long_liqs['price_float'], short_liqs['price_float']], 
+93         bins=20, alpha=0.7, label=['Long Liq (Sell)', 'Short Liq (Buy)'])
+94ax2.set_title('Liquidation Price Distribution')
+95ax2.set_xlabel('Price (USDT)')
+96ax2.set_ylabel('Frequency')
+97ax2.legend()
+98
+99# Time series of liquidations
+100hourly_liq = liq_df_sorted.groupby([pd.Grouper(freq='1H'), 'side'])['notional_value'].sum().unstack(fill_value=0)
+101if 'BUY' in hourly_liq.columns:
+102    ax3.plot(hourly_liq.index, hourly_liq['BUY'], label='Short Liquidations', color='red')
+103if 'SELL' in hourly_liq.columns:
+104    ax3.plot(hourly_liq.index, hourly_liq['SELL'], label='Long Liquidations', color='orange')
+105ax3.set_title('Liquidations Over Time')
+106ax3.set_ylabel('Notional Value (USDT)')
+107ax3.legend()
+108ax3.tick_params(axis='x', rotation=45)
+109
+110# Fill ratio vs order size
+111ax4.scatter(liq_df['quantity_float'], liq_df['fill_ratio'], alpha=0.6)
+112ax4.set_xlabel('Order Quantity')
+113ax4.set_ylabel('Fill Ratio')
+114ax4.set_title('Order Size vs Fill Efficiency')
+115ax4.grid(True, alpha=0.3)
+116
+117plt.tight_layout()
+118plt.show()
+119
+120# Risk metrics
+121print("Risk Metrics:")
+122print("Total liquidated value:", liq_df['notional_value'].sum(), "USDT")
+123print("Largest single liquidation:", liq_df['notional_value'].max(), "USDT")
+124print("Average liquidation size:", liq_df['notional_value'].mean(), "USDT")
+125print("Liquidation count:", len(liq_df))
+126
+More Information
+Our blog post gives a detailed tutorial about liquidation analysis. It includes the detection of cascades and the identification of price zones: Liquidation Analysis: Understanding Forced Selling in Crypto MarketsPrevious · Python SDKOpen InterestNext · Python SDKExchange Constants
+If you cannot find the information that you need, tell us. We also help with integrations.Contact support
+Ask on ChatGPTContact supportBack to top
+CryptoHFTData
+High frequency crypto data for backtesting and research.
+Product
+Data
+Datasets
+Exchanges
+Pricing
+Developers
+API Sandbox
+API Docs
+Resources
+Docs
+Guides
+Compare providers
+Status
+Company
+About
+Contact
+Privacy
+Terms
+© 2026 CryptoHFTData. All rights reserved.
+Built for quants, funds & individuals
